@@ -1,0 +1,42 @@
+{
+  "name": "charto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Small, thoughtful SVG bar and line charts. Zero runtime dependencies.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arsennur/Charto.git"
+  },
+  "homepage": "https://github.com/arsennur/Charto#readme",
+  "bugs": "https://github.com/arsennur/Charto/issues",
+  "type": "module",
+  "main": "./dist/charto.js",
+  "module": "./dist/charto.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/charto.js",
+      "default": "./dist/charto.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run check && npm run build:lib && vite build",
+    "build:lib": "node scripts/build.mjs && tsc -p tsconfig.build.json",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "check": "tsc --noEmit",
+    "preview": "vite preview --host 127.0.0.1",
+    "prepare": "npm run build:lib"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}
