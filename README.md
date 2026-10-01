@@ -25,36 +25,23 @@ Tarayıcı testleri: geliştirme sunucusu açıkken `/tests/browser.html`. Bar v
 
 Charto bir JavaScript paketidir. Ayrı bir sunucu veya CDN gerekmez: uygulamanızın build aracı kütüphaneyi uygulama dosyalarına dahil eder.
 
-### Private GitHub reposundan kurulum
-
-Repo: [arsennur/Charto](https://github.com/arsennur/Charto). Repo erişimi olan GitHub hesabınızla Git kimlik doğrulamasını bir kez yapılandırın:
+### npm'den kurulum
 
 ```sh
-gh auth login
-gh auth setup-git
+npm install charto
 ```
 
-Kullanacağınız uygulamanın klasöründe:
+Paket önceden derlenmiş JavaScript ve TypeScript bildirimleriyle gelir; çalışma zamanında ek bağımlılık gerekmez.
+
+### GitHub'dan kurulum
+
+Yayımlanmamış bir sürümü veya belirli bir etiketi denemek için:
 
 ```sh
 npm install 'git+https://github.com/arsennur/Charto.git#v0.2.0'
 ```
 
-Paket adı `charto` olduğu için aşağıdaki import örnekleri aynen geçerlidir. Git kurulumunda `prepare` script'i kütüphaneyi derler; uygulamaya derlenmiş JavaScript ve TypeScript bildirimleri yüklenir. Kurulum sırasında geliştirme araçları indirilir, çalışma zamanında ek bağımlılık gerekmez. Geliştirme ve Git'ten derleme için Node.js 22.18+ kullanın.
-
-Sürüm etiketini ve uygulamanızın lock dosyasını saklayın. Yeni sürüm kullanmak istediğinizde kurulum komutundaki etiketi değiştirin. Private repodan kurulum yapan CI/deploy ortamına da repo okuma erişimi gerekir; token'ı kaynak koduna veya paket URL'sine yazmayın.
-
-### Yerel paket dosyasından kurulum
-
-Paket henüz npm registry'ye yayımlanmadı. GitHub erişimi gerektirmeyen bir `.tgz` dosyası da üretebilirsiniz:
-
-```sh
-# Charto klasöründe
-npm pack
-
-# Kullanacağınız uygulamada
-npm install /absolute/path/to/charto/charto-0.2.0.tgz
-```
+Git kurulumunda `prepare` script'i kütüphaneyi derler. Kurulum sırasında geliştirme araçları indirilir; Node.js 22.18+ kullanın.
 
 ```html
 <div id="chart"></div>
@@ -76,26 +63,19 @@ const chart = barChart('#chart', {
 
 Build aracı olmayan sayfalarda, `dist/charto.js` dosyasını projenize kopyalayıp `<script type="module">` içinde `import { barChart } from './charto.js'` kullanabilirsiniz. Ek CSS dosyası gerekmez. Kapsayıcının genişliği otomatik izlenir.
 
-### Dağıtım önerisi
+### Yeni sürüm yayımlama
 
-- Kendi uygulamalarınız için şimdilik private GitHub reposu ve sürüm etiketleri yeterli.
-- Uygulama sayısı arttığında önceden derlenmiş paketleri bir registry'den dağıtabilirsiniz. Private kullanım için GitHub Packages veya private npm paketi; herkese açık dağıtım için public npm paketi kullanılabilir. Bu projede henüz registry yayını yapılandırılmadı.
-- Demo sitesi ayrı bir uygulamadır. İsterseniz `demo-dist/` klasörünü statik hosting'e koyabilirsiniz; kütüphaneyi kullanmak için demoyu yayınlamak gerekmez.
+Demo sitesi ayrı bir uygulamadır. İsterseniz `demo-dist/` klasörünü statik hosting'e koyabilirsiniz; kütüphaneyi kullanmak için demoyu yayınlamak gerekmez.
 
-`package.json` içindeki `private: true` npm registry'ye yayınlamayı engeller; GitHub veya `.tgz` üzerinden kurulumu engellemez.
-
-Yeni sürüm hazırlarken testleri çalıştırın, `npm version patch` ile sürümü ve etiketi oluşturun, ardından commit ve etiketi GitHub'a gönderin. Örneğin `0.2.0` sonrasında:
+`npm version` sürümü ve Git etiketini oluşturur. `npm publish` yayımlamadan önce `prepublishOnly` ile tip kontrolünü ve testleri, `prepare` ile kütüphane derlemesini çalıştırır. Örneğin `0.2.0` sonrasında:
 
 ```sh
-npm test
-npm run build
 npm version patch
 git push origin main --follow-tags
+npm publish
 ```
 
-Diğer uygulamada `#v0.2.1` etiketiyle yeniden kurun. Yayımladığınız etiketleri değiştirmeyin; her güncellemeyi yeni sürümle paylaşın.
-
-Kurulum mekanizması: [npm Git bağımlılıkları](https://docs.npmjs.com/cli/v11/commands/npm-install/) ve [prepare yaşam döngüsü](https://docs.npmjs.com/cli/v11/using-npm/scripts/).
+Yayımladığınız sürümleri ve etiketleri değiştirmeyin; her güncellemeyi yeni sürümle paylaşın.
 
 ## Küçük API
 
@@ -306,3 +286,7 @@ export function SalesChart({ data }: { data: BarDatum[] }) {
 - Modern tarayıcılarda `ResizeObserver`, SVG ve Web Animations API kullanır. Kütüphane dosyası ağ isteği yapmaz; demo tipografisi Google Fonts kullanır.
 
 Kütüphane kaynakları `src/`, demo `demo/` içindedir. Derleme minify ve gzip boyutlarını ölçer; demo bu ölçümü gösterir. Demo, bağımlılıklar ve araçlar dağıtılan kütüphane dosyasına dahil edilmez.
+
+## Lisans
+
+[MIT](LICENSE)
