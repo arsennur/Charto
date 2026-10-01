@@ -1,4 +1,4 @@
-import { barChart, lineChart, type BarChart, type BarChartOptions, type BarDatum, type ChartClickEvent, type LineChart, type LineChartOptions } from '../src/index.ts';
+import { barChart, lineChart, type BarChart, type BarChartOptions, type BarDatum, type ChartClickEvent, type ChartPoint, type LineChart, type LineChartOptions } from '../src/index.ts';
 import bundleSize from './bundle-size.json';
 import './style.css';
 
@@ -28,7 +28,7 @@ function icon(name: keyof typeof icons, size = 16): string {
 const logo = '<span class="logo-mark" aria-hidden="true"><i></i><i></i><i></i></span>';
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="site-header">
-    <a href="#" class="brand" aria-label="Charto home">${logo}<span>charto<span class="brand-dot">.</span></span><span class="version">v0.1</span></a>
+    <a href="#" class="brand" aria-label="Charto home">${logo}<span>charto<span class="brand-dot">.</span></span><span class="version">v0.2</span></a>
     <nav aria-label="Main navigation"><a class="nav-active" href="#playground">Playground</a><a href="#examples">Examples</a><a href="#quick-start">Quick start ${icon('arrow', 13)}</a></nav>
     <span class="header-note"><span class="status-dot"></span> Less, but better.</span>
   </header>
@@ -77,7 +77,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <label class="toggle-row points-toggle-row" for="points"><span>Show points</span><input type="checkbox" id="points" role="switch" checked><span class="toggle-track"></span></label>
           <label class="toggle-row" for="grid"><span>Grid lines</span><input type="checkbox" id="grid" role="switch" checked><span class="toggle-track"></span></label>
           <label class="toggle-row" for="values"><span>Show values</span><input type="checkbox" id="values" role="switch"><span class="toggle-track"></span></label>
-          <div class="settings-note">A few good options.<br>Infinite ways to make them yours.</div>
+          <details class="extra-controls"><summary>Fill, size &amp; scale</summary>
+            <label class="toggle-row fill-toggle-row" for="fill"><span>Area fill</span><input type="checkbox" id="fill" role="switch" checked><span class="toggle-track"></span></label>
+            <label class="toggle-row" for="compact"><span>Mini chart</span><input type="checkbox" id="compact" role="switch"><span class="toggle-track"></span></label>
+            <div class="control-field"><label for="tooltip-mode">Tooltip</label><div class="select-wrap"><select id="tooltip-mode"><option value="default">Default</option><option value="custom">Custom text</option><option value="off">Off</option></select></div></div>
+            <div class="scale-fields"><div><label for="scale-min">Minimum</label><input id="scale-min" type="number" step="any" placeholder="Auto" aria-describedby="scale-error"></div><div><label for="scale-max">Maximum</label><input id="scale-max" type="number" step="any" placeholder="Auto" aria-describedby="scale-error"></div></div>
+            <p id="scale-error" role="alert" hidden></p>
+          </details><div class="settings-note">A few good options.<br>Infinite ways to make them yours.</div>
         </aside>
       </div>
     </section>
@@ -85,9 +91,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <section class="examples" id="examples" aria-labelledby="examples-title"><div class="section-heading"><div class="section-title"><span class="section-index">02 /</span><h2 id="examples-title">Same data. Different stories.</h2></div><span class="section-subtitle">A couple of possibilities.</span></div>
       <div class="example-grid">
       <article class="example-card line-example"><div class="example-top"><div><span class="example-kicker">STRAIGHT TO THE POINT</span><h3>Every turn, in focus.</h3></div><span class="example-tag">Sharp line</span></div><div class="example-meta"><strong>Straight segments. Distinct corners.</strong><code>curve: 'linear'</code></div><div id="example-linear"></div></article>
-      <article class="example-card line-example"><div class="example-top"><div><span class="example-kicker">A SMOOTHER PERSPECTIVE</span><h3>Let the story flow.</h3></div><span class="example-tag">Curved line</span></div><div class="example-meta"><strong>Smooth curves. A clean, dot-free line.</strong><code>points: false</code></div><div id="example-smooth"></div></article>
+      <article class="example-card line-example"><div class="example-top"><div><span class="example-kicker">A SMOOTHER PERSPECTIVE</span><h3>Let the story flow.</h3></div><span class="example-tag">Curved line</span></div><div class="example-meta"><strong>Soft fill. Smooth curves.</strong><code>fill: true</code></div><div id="example-smooth"></div></article>
       <article class="example-card"><div class="example-top"><div><span class="example-kicker">LESS NOISE, MORE SIGNAL</span><h3>Room for a little growth.</h3></div><span class="example-tag">Grouped</span></div><div class="example-meta"><strong>Built for comparison.</strong><div class="mini-legend"><span><i style="background:#9066f4"></i>This year</span><span><i style="background:#fa4768"></i>Last year</span></div></div><div id="example-grouped"></div></article>
       <article class="example-card"><div class="example-top"><div><span class="example-kicker">EVERY COLOR TELLS A STORY</span><h3>A brighter way to see it.</h3></div><span class="example-tag">Stacked</span></div><div class="example-meta"><strong>Seven days. Four little categories.</strong><span class="example-detail">Weekly spending</span></div><div id="example-stacked"></div><div class="spending-legend"><span><i style="background:#27bd83"></i>Food &amp; Drink</span><span><i style="background:#9066f4"></i>Grocery</span><span><i style="background:#fa4768"></i>Shopping</span><span><i style="background:#ff9e24"></i>Transport</span></div></article></div>
+      <div class="mini-example-grid">
+        <article class="mini-example-card"><div><span class="example-kicker">A LITTLE MOMENTUM</span><h3>Weekly activity</h3><strong>411 <small>visits</small></strong></div><div id="example-mini-line"></div></article>
+        <article class="mini-example-card"><div><span class="example-kicker">SMALL SPACE, FULL STORY</span><h3>Daily orders</h3><strong>128 <small>orders</small></strong></div><div id="example-mini-bar"></div></article>
+      </div>
     </section>
 
     <section id="quick-start" class="quick-start" aria-labelledby="quick-start-title"><div class="quick-copy"><div class="eyebrow"><span class="small-line"></span> SMALL API. BIG LITTLE DETAILS.</div><h2 id="quick-start-title">A few lines.<br>That's it.</h2><p>Give it a home and some data.<br>We'll take care of the good-looking part.</p><div class="feature-checks"><span>${icon('check', 14)} Any framework</span><span>${icon('check', 14)} TypeScript ready</span><span>${icon('check', 14)} Keyboard accessible</span></div><button id="open-docs" class="docs-button" aria-expanded="false" aria-controls="api-docs">Explore the API ${icon('right')}</button></div><div class="quick-code"><div class="code-filename"><span><i></i> hello-charto.ts</span><button id="copy-quick" class="text-button" aria-label="Copy quick start code">${icon('copy', 15)} Copy</button></div><pre><code><span class="syntax-purple">import</span> { lineChart } <span class="syntax-purple">from</span> <span class="syntax-green">'charto'</span>;
@@ -102,7 +112,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   curve: <span class="syntax-green">'smooth'</span>,
   color: <span class="syntax-green">'#27bd83'</span>,
 });</code></pre><div class="quick-code-footer">No providers. No stylesheet imports. Just charts.<span>ESM</span></div></div></section>
-    <section id="api-docs" class="api-docs" hidden aria-label="API documentation"><div><h3>Bring Charto into your project</h3><p>This is a local package. Run <code>npm pack</code> in this project, install the generated <code>.tgz</code> in your app, then import <code>barChart</code> or <code>lineChart</code>. It has no runtime dependencies. In a plain HTML page, import the built <code>dist/charto.js</code> directly.</p><p>Create a container such as <code>&lt;div id="chart"&gt;&lt;/div&gt;</code>. Create your chart after it mounts and <code>chart.destroy()</code> when it unmounts.</p></div><div><h3>Two charts. One familiar API.</h3><dl><dt>data</dt><dd>Labels and values. Use value arrays for multiple series.</dd><dt>series</dt><dd>Names and colors for multiple series.</dd><dt>onClick</dt><dd>Handle a bar, segment, or point click with its value, category, and series.</dd><dt>curve / strokeWidth / points</dt><dd>Line style, thickness, and point visibility.</dd><dt>orientation / mode</dt><dd>vertical or horizontal; grouped or stacked.</dd><dt>color / theme / radius</dt><dd>Your visual language, with thoughtful defaults.</dd><dt>animate / grid / labels / values</dt><dd>Simple switches for motion and detail.</dd><dt>height / label / formatValue</dt><dd>Chart height, accessible name, and number formatting.</dd></dl><p><code>chart.update(options)</code> · <code>chart.replay()</code><br><code>chart.toSVG()</code> · <code>chart.destroy()</code></p><p>Stacked bars round the outer corners and keep internal joins flush. Set radius to 0 for square corners.</p></div></section>
+    <section id="api-docs" class="api-docs" hidden aria-label="API documentation"><div><h3>Bring Charto into your project</h3><p>This is a local package. Run <code>npm pack</code> in this project, install the generated <code>.tgz</code> in your app, then import <code>barChart</code> or <code>lineChart</code>. It has no runtime dependencies. In a plain HTML page, import the built <code>dist/charto.js</code> directly.</p><p>Create a container such as <code>&lt;div id="chart"&gt;&lt;/div&gt;</code>. Create your chart after it mounts and <code>chart.destroy()</code> when it unmounts.</p></div><div><h3>Two charts. One familiar API.</h3><dl><dt>data</dt><dd>Labels and values. Use value arrays for multiple series.</dd><dt>series</dt><dd>Names and colors for multiple series.</dd><dt>onClick</dt><dd>Handle a bar, segment, or point click with its value, category, and series.</dd><dt>curve / strokeWidth / points / fill</dt><dd>Line style, thickness, markers, and gradient fill.</dd><dt>compact</dt><dd>Small charts without axes, grid, or labels.</dd><dt>tooltip</dt><dd>true, false, or a function returning tooltip text.</dd><dt>min / max</dt><dd>Fixed scale boundaries. Omit for automatic scaling.</dd><dt>orientation / mode</dt><dd>vertical or horizontal; grouped or stacked.</dd><dt>color / theme / radius</dt><dd>Your visual language, with thoughtful defaults.</dd><dt>animate / grid / labels / values</dt><dd>Simple switches for motion and detail.</dd><dt>height / label / formatValue</dt><dd>Chart height, accessible name, and number formatting.</dd></dl><p><code>chart.update(options)</code> · <code>chart.replay()</code><br><code>chart.toSVG()</code> · <code>chart.destroy()</code></p><p>Stacked bars round the outer corners and keep internal joins flush. Set radius to 0 for square corners.</p></div></section>
   </main>
   <footer class="site-footer"><a href="#" class="brand">${logo}<span>charto.</span></a><span>A small thing, made with care.</span><span>Less code. More clarity.</span></footer>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -118,7 +128,7 @@ const palettes: Record<string, { name: string; colors: string[] }> = {
   amber: { name: 'Amber', colors: ['#ff9e24', '#fa4768', '#27bd83', '#9066f4'] },
   blue: { name: 'Blue', colors: ['#3982f7', '#9066f4', '#27bd83', '#fa4768'] },
 };
-const state = { family: 'line' as Family, curve: 'smooth' as 'linear' | 'smooth', strokeWidth: 3, points: true, kind: 'vertical' as Kind, palette: 'vivid', theme: 'light' as 'light' | 'dark', dataset: 'revenue' as Dataset, period: 'monthly', radius: 5, animate: true, grid: true, values: false, code: false };
+const state = { family: 'line' as Family, curve: 'smooth' as 'linear' | 'smooth', strokeWidth: 3, points: true, fill: true, compact: false, tooltip: 'default' as 'default' | 'custom' | 'off', min: '', max: '', kind: 'vertical' as Kind, palette: 'vivid', theme: 'light' as 'light' | 'dark', dataset: 'revenue' as Dataset, period: 'monthly', radius: 5, animate: true, grid: true, values: false, code: false };
 const baseData = [2440, 3150, 2740, 4010, 3500, 4580, 3870, 5030, 4450, 5480, 4130, 4910];
 let sampleData = [...baseData];
 let currentData: BarDatum[] = [];
@@ -141,6 +151,9 @@ function dataForState(): BarDatum[] {
     return { label, value: multiple ? split : value };
   });
 }
+function customTooltip({ label, value, seriesName }: ChartPoint): string {
+  return `${label}${seriesName === 'Value' ? '' : ' · ' + seriesName}\n${state.dataset === 'revenue' ? '$' : ''}${value.toLocaleString('en')}\nClick to view details`;
+}
 function getOptions(): BarChartOptions & LineChartOptions {
   const multiple = state.family === 'bar' && (state.kind === 'grouped' || state.kind === 'stacked');
   return {
@@ -153,11 +166,16 @@ function getOptions(): BarChartOptions & LineChartOptions {
     orientation: state.kind === 'horizontal' ? 'horizontal' : 'vertical',
     mode: state.kind === 'stacked' ? 'stacked' : 'grouped',
     theme: state.theme,
-    height: state.family === 'bar' && state.kind === 'horizontal' && state.period === 'monthly' ? 350 : 290,
+    height: state.compact ? 80 : state.family === 'bar' && state.kind === 'horizontal' && state.period === 'monthly' ? 350 : 290,
     radius: state.radius,
     curve: state.curve,
     strokeWidth: state.strokeWidth,
     points: state.points,
+    fill: state.fill,
+    compact: state.compact,
+    tooltip: state.tooltip === 'off' ? false : state.tooltip === 'custom' ? customTooltip : true,
+    min: state.min === '' ? undefined : Number(state.min),
+    max: state.max === '' ? undefined : Number(state.max),
     animate: state.animate,
     grid: state.grid,
     values: state.values,
@@ -176,10 +194,15 @@ function codeForState(): string {
   if (options.series) lines.push('  series: ' + JSON.stringify(options.series) + ',');
   if (state.family === 'bar' && options.orientation === 'horizontal') lines.push("  orientation: 'horizontal',");
   if (state.family === 'bar' && options.mode === 'stacked') lines.push("  mode: 'stacked',");
-  if (state.family === 'line') lines.push(`  curve: '${state.curve}',`, `  strokeWidth: ${state.strokeWidth},`, `  points: ${state.points},`);
+  if (state.family === 'line') lines.push(`  curve: '${state.curve}',`, `  strokeWidth: ${state.strokeWidth},`, `  points: ${state.points},`, `  fill: ${state.fill},`);
   else lines.push(`  radius: ${state.radius},`);
   lines.push(`  height: ${options.height},`, `  label: '${options.label}',`);
   if (state.theme !== 'light') lines.push("  theme: 'dark',");
+  if (state.compact) lines.push('  compact: true,');
+  if (options.min !== undefined) lines.push(`  min: ${options.min},`);
+  if (options.max !== undefined) lines.push(`  max: ${options.max},`);
+  if (state.tooltip === 'off') lines.push('  tooltip: false,');
+  if (state.tooltip === 'custom') lines.push("  tooltip: ({ label, value, seriesName }) =>", "    label + (seriesName === 'Value' ? '' : ' · ' + seriesName) + '\\n' +", `    '${state.dataset === 'revenue' ? '$' : ''}' + value.toLocaleString('en') + '\\nClick to view details',`);
   if (!state.animate) lines.push('  animate: false,');
   if (!state.grid) lines.push('  grid: false,');
   if (state.values) lines.push('  values: true,');
@@ -198,6 +221,8 @@ function render(): void {
     renderedFamily = state.family;
   } else chart.update(options);
   $('#chart-card').classList.toggle('dark', state.theme === 'dark');
+  $('#chart-card').classList.toggle('compact-card', state.compact);
+  $('#chart-legend').hidden = state.compact;
   const total = currentData.reduce((sum, datum) => sum + (Array.isArray(datum.value) ? datum.value.reduce((a, b) => a + b, 0) : datum.value), 0);
   const names = { revenue: 'Revenue', visitors: 'Visitors', subscriptions: 'Subscriptions' };
   $('#chart-title').textContent = `${names[state.dataset]} overview`;
@@ -233,10 +258,12 @@ function render(): void {
   $('.radius-field').hidden = isLine;
   $('.line-width-field').hidden = !isLine;
   $('.points-toggle-row').hidden = !isLine;
+  $('.fill-toggle-row').hidden = !isLine;
+  $<HTMLInputElement>('#grid').disabled = state.compact;
   $('#stroke-width-value').textContent = `${state.strokeWidth} px`;
   $('#line-style-note').textContent = state.curve === 'smooth' ? 'Smooth curves, exact data.' : 'Straight lines, clear turns.';
   const stacked = !isLine && state.kind === 'stacked';
-  $<HTMLInputElement>('#values').disabled = stacked;
+  $<HTMLInputElement>('#values').disabled = stacked || state.compact;
   $('.radius-field').title = stacked ? 'Rounds the outside corners while keeping segment joins flush.' : '';
   document.querySelectorAll<HTMLButtonElement>('[data-family], [data-curve]').forEach(button => {
     const active = button.dataset.family ? button.dataset.family === state.family : button.dataset.curve === state.curve;
@@ -259,17 +286,38 @@ document.querySelectorAll<HTMLButtonElement>('[data-theme]').forEach(button => b
 document.querySelectorAll<HTMLButtonElement>('[data-period]').forEach(button => button.addEventListener('click', () => { state.period = button.dataset.period!; render(); }));
 $('#dataset').addEventListener('change', event => { state.dataset = (event.target as HTMLSelectElement).value as Dataset; render(); });
 $('#radius').addEventListener('input', event => { state.radius = Number((event.target as HTMLInputElement).value); render(); });
-(['animate', 'grid', 'values', 'points'] as const).forEach(key => $('#' + key).addEventListener('change', event => { state[key] = (event.target as HTMLInputElement).checked; render(); }));
+(['animate', 'grid', 'values', 'points', 'fill', 'compact'] as const).forEach(key => $('#' + key).addEventListener('change', event => { state[key] = (event.target as HTMLInputElement).checked; render(); }));
+$('#tooltip-mode').addEventListener('change', event => { state.tooltip = (event.target as HTMLSelectElement).value as typeof state.tooltip; render(); });
+function updateBounds(): void {
+  const minInput = $<HTMLInputElement>('#scale-min');
+  const maxInput = $<HTMLInputElement>('#scale-max');
+  const min = minInput.value === '' ? undefined : Number(minInput.value);
+  const max = maxInput.value === '' ? undefined : Number(maxInput.value);
+  const invalid = minInput.validity.badInput || maxInput.validity.badInput || [min, max].some(value => value !== undefined && (!Number.isFinite(value) || Math.abs(value) > 1e100));
+  const message = invalid ? 'Enter a finite number between -1e100 and 1e100.' : min !== undefined && max !== undefined && min >= max ? 'Minimum must be less than maximum.' : '';
+  $('#scale-error').textContent = message;
+  $('#scale-error').hidden = !message;
+  if (message) return;
+  state.min = minInput.value;
+  state.max = maxInput.value;
+  render();
+}
+$('#scale-min').addEventListener('input', updateBounds);
+$('#scale-max').addEventListener('input', updateBounds);
 $('#code-toggle').addEventListener('click', () => { state.code = !state.code; render(); });
 $('#replay').addEventListener('click', () => chart.replay());
 $('#shuffle').addEventListener('click', () => { sampleData = baseData.map(value => Math.round(value * (0.65 + Math.random() * 0.7))); render(); });
 $('#reset').addEventListener('click', () => {
-  Object.assign(state, { family: 'line', curve: 'smooth', strokeWidth: 3, points: true, kind: 'vertical', palette: 'vivid', theme: 'light', dataset: 'revenue', period: 'monthly', radius: 5, animate: true, grid: true, values: false, code: false });
+  Object.assign(state, { family: 'line', curve: 'smooth', strokeWidth: 3, points: true, fill: true, compact: false, tooltip: 'default' as 'default' | 'custom' | 'off', min: '', max: '', kind: 'vertical', palette: 'vivid', theme: 'light', dataset: 'revenue', period: 'monthly', radius: 5, animate: true, grid: true, values: false, code: false });
   sampleData = [...baseData];
   $<HTMLSelectElement>('#dataset').value = 'revenue';
+  $<HTMLSelectElement>('#tooltip-mode').value = 'default';
+  $<HTMLInputElement>('#scale-min').value = '';
+  $<HTMLInputElement>('#scale-max').value = '';
+  $('#scale-error').hidden = true;
   $<HTMLInputElement>('#radius').value = '5';
   $<HTMLInputElement>('#stroke-width').value = '3';
-  (['animate', 'grid', 'values', 'points'] as const).forEach(key => { $<HTMLInputElement>('#' + key).checked = state[key]; });
+  (['animate', 'grid', 'values', 'points', 'fill', 'compact'] as const).forEach(key => { $<HTMLInputElement>('#' + key).checked = state[key]; });
   render();
 });
 let toastTimeout: ReturnType<typeof setTimeout>;
@@ -296,8 +344,10 @@ render();
 const comparisonData = [32, 54, 42, 76, 58, 84, 65].map((value, index) => ({ label: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index], value }));
 const exampleClick = ({ label, value, seriesName }: ChartClickEvent): void => toast(`${label}${seriesName === 'Value' ? '' : ' · ' + seriesName} — ${value.toLocaleString('en')}`);
 const examples = [
+  lineChart('#example-mini-line', { data: comparisonData, compact: true, fill: true, points: false, color: '#9066f4', min: 0, max: 100, onClick: exampleClick, label: 'Weekly activity sparkline' }),
+  barChart('#example-mini-bar', { data: comparisonData.map((datum, index) => ({ label: datum.label, value: [10, 14, 8, 24, 17, 29, 26][index] })), compact: true, color: '#27bd83', radius: 3, onClick: exampleClick, label: 'Daily orders sparkline' }),
   lineChart('#example-linear', { data: comparisonData, curve: 'linear', color: '#9066f4', height: 200, label: 'Daily activity with sharp corners', onClick: exampleClick }),
-  lineChart('#example-smooth', { data: comparisonData, curve: 'smooth', points: false, color: '#27bd83', height: 200, label: 'Daily activity with smooth curves', onClick: exampleClick }),
+  lineChart('#example-smooth', { data: comparisonData, curve: 'smooth', points: false, fill: true, color: '#27bd83', height: 200, label: 'Daily activity with smooth curves', onClick: exampleClick }),
   barChart('#example-grouped', { data: ['Q1', 'Q2', 'Q3', 'Q4'].map((label, index) => ({ label, value: [[34, 24], [52, 38], [45, 32], [68, 49]][index] })), series: [{ name: 'This year', color: '#9066f4' }, { name: 'Last year', color: '#fa4768' }], height: 190, radius: 4, label: 'Quarterly growth comparison', onClick: exampleClick }),
   barChart('#example-stacked', {
     data: [[22, 15, 15, 32], [16, 12, 11, 11], [53, 15, 15, 17], [18, 20, 18, 14], [13, 9, 9, 19], [22, 15, 15, 32], [22, 15, 15, 18]]

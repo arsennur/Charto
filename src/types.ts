@@ -10,7 +10,7 @@ export interface BarSeries {
   color?: string;
 }
 
-export interface ChartClickEvent {
+export interface ChartPoint {
   /** The original data item supplied to the chart. */
   datum: BarDatum;
   label: string;
@@ -22,6 +22,9 @@ export interface ChartClickEvent {
   seriesIndex: number;
   /** Configured name, or "Value" / "Series N" when unnamed. */
   seriesName: string;
+}
+
+export interface ChartClickEvent extends ChartPoint {
   nativeEvent: MouseEvent | KeyboardEvent;
 }
 
@@ -30,6 +33,13 @@ export interface BarChartOptions {
   series?: BarSeries[];
   color?: string;
   height?: number;
+  /** Hide axes, labels, grid, and value labels. Default height is 80px. */
+  compact?: boolean;
+  /** Exact scale bounds. Data beyond the bounds is clipped. */
+  min?: number;
+  max?: number;
+  /** Enable, disable, or format tooltip text. Strings are never interpreted as HTML. */
+  tooltip?: boolean | ((point: ChartPoint) => string);
   orientation?: 'vertical' | 'horizontal';
   mode?: 'grouped' | 'stacked';
   theme?: 'light' | 'dark';
@@ -66,6 +76,8 @@ export interface LineChartOptions extends Omit<BarChartOptions, 'orientation' | 
   strokeWidth?: number;
   /** Show point markers. Tooltips and keyboard navigation also work when hidden. */
   points?: boolean;
+  /** Subtle gradient from the line to zero (or the nearest scale boundary). */
+  fill?: boolean;
 }
 
 export interface LineChart extends Chart<LineChartOptions> {}

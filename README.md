@@ -37,7 +37,7 @@ gh auth setup-git
 Kullanacağınız uygulamanın klasöründe:
 
 ```sh
-npm install 'git+https://github.com/arsennur/Charto.git#v0.1.0'
+npm install 'git+https://github.com/arsennur/Charto.git#v0.2.0'
 ```
 
 Paket adı `charto` olduğu için aşağıdaki import örnekleri aynen geçerlidir. Git kurulumunda `prepare` script'i kütüphaneyi derler; uygulamaya derlenmiş JavaScript ve TypeScript bildirimleri yüklenir. Kurulum sırasında geliştirme araçları indirilir, çalışma zamanında ek bağımlılık gerekmez. Geliştirme ve Git'ten derleme için Node.js 22.18+ kullanın.
@@ -53,7 +53,7 @@ Paket henüz npm registry'ye yayımlanmadı. GitHub erişimi gerektirmeyen bir `
 npm pack
 
 # Kullanacağınız uygulamada
-npm install /absolute/path/to/charto/charto-0.1.0.tgz
+npm install /absolute/path/to/charto/charto-0.2.0.tgz
 ```
 
 ```html
@@ -84,7 +84,7 @@ Build aracı olmayan sayfalarda, `dist/charto.js` dosyasını projenize kopyalay
 
 `package.json` içindeki `private: true` npm registry'ye yayınlamayı engeller; GitHub veya `.tgz` üzerinden kurulumu engellemez.
 
-Yeni sürüm hazırlarken testleri çalıştırın, `npm version patch` ile sürümü ve etiketi oluşturun, ardından commit ve etiketi GitHub'a gönderin. Örneğin `0.1.0` sonrasında:
+Yeni sürüm hazırlarken testleri çalıştırın, `npm version patch` ile sürümü ve etiketi oluşturun, ardından commit ve etiketi GitHub'a gönderin. Örneğin `0.2.0` sonrasında:
 
 ```sh
 npm test
@@ -93,7 +93,7 @@ npm version patch
 git push origin main --follow-tags
 ```
 
-Diğer uygulamada `#v0.1.1` etiketiyle yeniden kurun. Yayımladığınız etiketleri değiştirmeyin; her güncellemeyi yeni sürümle paylaşın.
+Diğer uygulamada `#v0.2.1` etiketiyle yeniden kurun. Yayımladığınız etiketleri değiştirmeyin; her güncellemeyi yeni sürümle paylaşın.
 
 Kurulum mekanizması: [npm Git bağımlılıkları](https://docs.npmjs.com/cli/v11/commands/npm-install/) ve [prepare yaşam döngüsü](https://docs.npmjs.com/cli/v11/using-npm/scripts/).
 
@@ -128,6 +128,7 @@ chart.update({ points: false });
 - `curve: 'linear'` veri noktalarını düz parçalarla birleştirir.
 - `curve: 'smooth'` (varsayılan) noktaların içinden geçen yumuşak Bézier eğrileri çizer. Eğri, iki komşu değerin dışına taşmaz.
 - `strokeWidth` varsayılan `3` pikseldir; 0'dan büyük, en fazla 20 olabilir.
+- `fill: true` çizgi ile sıfır arasını aşağı doğru şeffaflaşan bir gradyanla doldurur. Varsayılanı `false` değerindedir; iki çizgi stilinde de çalışır. Sıfır sabit ölçeğin dışındaysa en yakın ölçek sınırına kadar dolar. Eksik verilerin arası doldurulmaz.
 - `points` varsayılan `true` değerindedir. `false` noktaları gizler; tooltip, klavye gezinmesi ve veri tablosu çalışmaya devam eder. Hem keskin hem kıvrımlı çizgilerde kullanılabilir.
 - Açılışta çizgi soldan sağa çizilir. `animate: false` ve sistemin hareketi azaltma tercihi desteklenir.
 - `data`, `series`, `color`, `height`, `theme`, `grid`, `labels`, `values`, `label` ve `formatValue` iki chart türünde de kullanılabilir.
@@ -145,10 +146,13 @@ chart.update({ points: false });
 | `mode` | `'grouped'` | `'grouped'` veya `'stacked'` |
 | `color` | Vivid green | Birinci serinin rengi |
 | `theme` | `'light'` | `'light'` veya `'dark'` |
-| `height` | `320` | Piksel cinsinden yükseklik; en az 120 |
+| `height` | `320` | Piksel cinsinden yükseklik; en az 120. Compact modda varsayılan 80, minimum 32 |
+| `compact` | `false` | Eksen, grid, kategori ve değer etiketlerini gizleyen mini grafik modu |
+| `min` / `max` | Otomatik | Değer ölçeğinin tam alt/üst sınırları |
+| `tooltip` | `true` | `true`, `false` veya `(point: ChartPoint) => string` |
 | `radius` | `5` | Bar köşe yarıçapı; yığılmış barlarda yalnızca dış köşeler |
 | `animate` | `true` | Kademeli açılış animasyonu |
-| `grid` | `true` | Yardımcı çizgiler; sıfır çizgisi her zaman görünür |
+| `grid` | `true` | Yardımcı çizgiler; compact modda gizlenir |
 | `labels` | `true` | Kategori etiketleri |
 | `values` | `false` | Bar uçlarında değerler |
 | `label` | `'Bar chart'` | Erişilebilir chart adı |
@@ -163,6 +167,45 @@ chart.destroy();
 ```
 
 `update()` seçenekleri birleştirir ve açılış animasyonunu yeniden oynatır. Güncellemelerde animasyonu kapatmak için `animate: false` geçin. `destroy()` yalnızca o chart'ın oluşturduğu DOM'u, animasyonlarını ve gözlemcilerini temizler.
+
+### Mini grafik, dolgu ve tooltip
+
+```ts
+lineChart('#mini-chart', {
+  data: [
+    { label: 'Pzt', value: 42 },
+    { label: 'Sal', value: 68 },
+    { label: 'Çar', value: 53 },
+  ],
+  compact: true,
+  height: 64,
+  curve: 'smooth',
+  points: false,
+  fill: true,
+  min: 0,
+  max: 100,
+  tooltip: ({ label, value }) => `${label} · ${value} sipariş`,
+});
+```
+
+- `compact` bar ve line chart'larda çalışır. Eksenler, grid, kategori ve değer etiketleri gizlenir; veri tablosu, tooltip ve `onClick` korunur. En az 32 px yüksekliğinde, dar kartlarda kullanılabilir.
+- `height` belirtmezseniz compact mod 80 px, normal mod 320 px kullanır. `chart.update({ compact: false })` otomatik yüksekliği de geri getirir. Açıkça verdiğiniz yüksekliği temizlemek için `height: undefined` geçin.
+- Tooltip'i tamamen kapatmak için `tooltip: false` kullanın. `tooltip: true` veya `undefined` varsayılan görünümü geri getirir. Tıklama callback'i tooltip'ten bağımsızdır.
+- Tooltip fonksiyonu `datum`, `label`, `value`, `dataIndex`, `seriesIndex`, `seriesName` alır. `ChartPoint` tipini import edebilirsiniz. Sonuç düz metindir; HTML olarak işlenmez. Boş string döndürmek o noktada tooltip'i gizler. Satır sonu için `\n` kullanılabilir.
+- `formatValue` eksen, varsayılan tooltip ve veri tablosundaki sayı biçimini belirler. Özel `tooltip` fonksiyonu yalnızca tooltip içeriğini değiştirir.
+
+### Sabit ölçek
+
+`min` ve `max`, barlarda değer eksenine, line chart'larda Y eksenine uygulanır. Örneğin yüzde grafiklerini karşılaştırmak için `min: 0, max: 100` kullanın. Tek sınırı sabitleyip diğerini otomatik bırakabilirsiniz.
+
+Sınırlar tam olarak uygulanır. Sınır dışındaki çizgi parçaları ve barlar görünür alanda kesilir; dışarıda kalan line noktaları tıklama hedefi oluşturmaz. Veri değiştirilmez: erişilebilir tabloda ham değerler, görünür bir bar parçasına tıklandığında da orijinal değer bulunur. Gruplu ve yığılmış barlar ile yatay görünüm de desteklenir.
+
+```ts
+chart.update({ min: 0, max: 100 });
+chart.update({ min: undefined, max: undefined }); // Otomatik ölçeğe dön.
+```
+
+İki sınır da verildiğinde `min < max` olmalıdır. NaN, Infinity ve ±1e100 dışındaki sınırlar reddedilir; hatalı güncelleme mevcut grafiği bozmaz.
 
 ### Bar ve nokta tıklamaları
 

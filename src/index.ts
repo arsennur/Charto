@@ -1,7 +1,7 @@
 import { getDomain, segments, validate, valuesOf } from './layout.ts';
 import { linePath, type Point } from './line-path.ts';
 import type { BarChart, BarChartOptions, Chart, LineChart, LineChartOptions } from './types.js';
-export type { BarChart, BarChartOptions, BarDatum, BarSeries, ChartClickEvent, LineChart, LineChartOptions, LineDatum, LineSeries } from './types.js';
+export type { BarChart, BarChartOptions, BarDatum, BarSeries, ChartClickEvent, ChartPoint, LineChart, LineChartOptions, LineDatum, LineSeries } from './types.js';
 
 type Options = BarChartOptions & LineChartOptions;
 
@@ -34,7 +34,9 @@ function shorten(text: string, length: number): string {
 function withDefaults(input: Options, isLine: boolean): Options {
   return {
     ...input,
-    height: input.height ?? 320,
+    height: input.height ?? (input.compact ? 80 : 320),
+    compact: input.compact ?? false,
+    tooltip: input.tooltip ?? true,
     orientation: input.orientation ?? 'vertical',
     mode: input.mode ?? 'grouped',
     theme: input.theme ?? 'light',
@@ -47,11 +49,15 @@ function withDefaults(input: Options, isLine: boolean): Options {
     curve: input.curve ?? 'smooth',
     strokeWidth: input.strokeWidth ?? 3,
     points: input.points ?? true,
+    fill: input.fill ?? false,
   };
 }
 
 function validateChart(options: Options, isLine: boolean): void {
   validate(options);
+  if (options.tooltip !== undefined && typeof options.tooltip !== 'boolean' && typeof options.tooltip !== 'function') {
+    throw new TypeError('Charto: tooltip must be a boolean or a text formatter.');
+  }
   if (options.onClick !== undefined && typeof options.onClick !== 'function') {
     throw new TypeError('Charto: onClick must be a function.');
   }
@@ -67,6 +73,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
   const host = typeof target === 'string' ? document.querySelector<HTMLElement>(target) : target;
   if (!host) throw new Error('Charto: target element was not found.');
   validateChart(initial, isLine);
+  let settings = { ...initial };
   let options = withDefaults(initial, isLine);
   const chartId = `charto-${++chartSequence}`;
   let destroyed = false;
@@ -96,7 +103,8 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
     if (destroyed) return;
     stopAnimations();
     hideTooltip();
-    const width = Math.max(160, host!.getBoundingClientRect().width || renderedWidth || 640);
+    const mini = options.compact!;
+    const width = Math.max(mini ? 32 : 160, host!.getBoundingClientRect().width || renderedWidth || 640);
     renderedWidth = width;
     const height = options.height!;
     const theme = colors[options.theme ?? 'light'];
@@ -106,17 +114,22 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
     const seriesCount = Math.max(1, options.series?.length ?? 0, ...options.data.map(datum => valuesOf(datum).length));
     const formatTick = options.formatValue ?? ((value: number) => value !== 0 && Math.abs(value) < 0.01 ? value.toExponential(1) : compact.format(value));
     const formatFull = options.formatValue ?? ((value: number) => exact.format(value));
-    const domain = getDomain(options.data, stacked);
+    const domain = getDomain(options.data, stacked, options);
     const tickWidth = Math.max(...domain.ticks.map(value => formatTick(value).length)) * 6.5;
-    const left = horizontal ? (options.labels ? Math.min(112, width * 0.26) : 14) : Math.min(width * 0.3, tickWidth + 16);
-    const right = horizontal ? (options.values ? 54 : 24) : 18;
-    const top = 24;
-    const bottom = horizontal ? 30 : options.labels ? 36 : 18;
-    const plotWidth = Math.max(20, width - left - right);
+    const inset = isLine ? 10 : 4;
+    const left = mini ? inset : horizontal ? (options.labels ? Math.min(112, width * 0.26) : 14) : Math.min(width * 0.3, tickWidth + 16);
+    const right = mini ? inset : horizontal ? (options.values ? 54 : 24) : 18;
+    const top = mini ? inset : 24;
+    const bottom = mini ? inset : horizontal ? 30 : options.labels ? 36 : 18;
+    const plotWidth = Math.max(1, width - left - right);
     const plotHeight = height - top - bottom;
-    const scale = (value: number): number => horizontal
-      ? left + (value - domain.min) / (domain.max - domain.min) * plotWidth
-      : top + plotHeight - (value - domain.min) / (domain.max - domain.min) * plotHeight;
+    const clamp = (value: number): number => Math.max(domain.min, Math.min(domain.max, value));
+    const scale = (value: number): number => {
+      // Bound offscreen coordinates even when a tiny fixed range excludes large values.
+      const fraction = Math.max(-1e6, Math.min(1e6, (value - domain.min) / (domain.max - domain.min)));
+      return horizontal ? left + fraction * plotWidth : top + plotHeight - fraction * plotHeight;
+    };
+    const baseline = scale(clamp(0));
     const nextSvg = svgElement('svg', {
       xmlns: NS, width: '100%', height, viewBox: `0 0 ${width} ${height}`,
       role: 'group', 'aria-label': options.label!, 'font-family': 'ui-sans-serif, system-ui, -apple-system, sans-serif',
@@ -126,6 +139,8 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
     const title = svgElement('title');
     title.textContent = options.label!;
     nextSvg.append(title);
+    const definitions = svgElement('defs');
+    nextSvg.append(definitions);
     tooltip.style.background = theme.tooltip;
     tooltip.style.color = theme.tooltipText;
     const marks: SVGGraphicsElement[] = [];
@@ -133,17 +148,21 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
       const datum = options.data[dataIndex];
       const label = datum.label;
       const onClick = options.onClick;
+      const point = { datum, label, value, dataIndex, seriesIndex, seriesName: name || 'Value' };
       mark.setAttribute('tabindex', marks.length === 0 ? '0' : '-1');
       mark.setAttribute('role', onClick ? 'button' : 'img');
       mark.setAttribute('aria-label', `${label}${name ? ` · ${name}` : ''}: ${formatFull(value)}`);
       mark.style.cursor = onClick ? 'pointer' : 'default';
       const activate = (nativeEvent: MouseEvent | KeyboardEvent): void => {
         if (destroyed || svg !== nextSvg) return;
-        onClick?.({ datum, label, value, dataIndex, seriesIndex, seriesName: name || 'Value', nativeEvent });
+        onClick?.({ ...point, nativeEvent });
       };
       if (onClick) mark.addEventListener('click', activate);
       const showTooltip = (event?: PointerEvent): void => {
-        tooltip.textContent = `${label}${name ? ` · ${name}` : ''}\n${formatFull(value)}`;
+        if (options.tooltip === false) return;
+        const content = typeof options.tooltip === 'function' ? options.tooltip(point) : `${label}${name ? ` · ${name}` : ''}\n${formatFull(value)}`;
+        if (!content) { hideTooltip(); return; }
+        tooltip.textContent = content;
         tooltip.hidden = false;
         const wrapperBounds = wrapper.getBoundingClientRect();
         const markBounds = mark.getBoundingClientRect();
@@ -175,9 +194,9 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
       marks.push(mark);
     };
     if (count === 0) {
-      nextSvg.append(svgText('No data yet', width / 2, height / 2, { 'text-anchor': 'middle', 'font-size': 13 }));
+      if (!mini) nextSvg.append(svgText('No data yet', width / 2, height / 2, { 'text-anchor': 'middle', 'font-size': 13 }));
     } else {
-      for (const value of domain.ticks) {
+      for (const value of mini ? [] : domain.ticks) {
         const position = scale(value);
         if (options.grid || value === 0) nextSvg.append(svgElement('line', horizontal
           ? { x1: position, x2: position, y1: top, y2: top + plotHeight, stroke: theme.grid, 'stroke-dasharray': value === 0 ? 'none' : '3 5' }
@@ -191,7 +210,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
         const pointX = (index: number): number => count === 1 ? left + plotWidth / 2 : left + index * spacing;
         const labelStep = Math.max(1, Math.ceil(44 / Math.max(1, spacing)));
         options.data.forEach((datum, index) => {
-          if (options.labels && (index % labelStep === 0 || index === count - 1)) {
+          if (!mini && options.labels && (index % labelStep === 0 || index === count - 1)) {
             // Reserve the last label's space when intermediate labels are sparse.
             if (index !== count - 1 && index !== 0 && count - 1 - index < labelStep) return;
             nextSvg.append(svgText(shorten(datum.label, Math.max(4, Math.floor(Math.max(44, spacing * labelStep) / 6.5))), pointX(index), height - 12, {
@@ -199,6 +218,18 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
             }));
           }
         });
+        const fillLayer = svgElement('g', { 'data-charto-fills': '' });
+        const lineLayer = svgElement('g');
+        if (options.min !== undefined || options.max !== undefined) {
+          const clipId = `${chartId}-plot`;
+          const clip = svgElement('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' });
+          clip.append(svgElement('rect', { x: left, y: top, width: plotWidth, height: plotHeight }));
+          definitions.append(clip);
+          fillLayer.setAttribute('clip-path', `url(#${clipId})`);
+          lineLayer.setAttribute('clip-path', `url(#${clipId})`);
+        }
+        if (options.fill) nextSvg.append(fillLayer);
+        nextSvg.append(lineLayer);
         const pointLayer = svgElement('g');
         for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex++) {
           const color = options.series?.[seriesIndex]?.color ?? (seriesIndex === 0 ? options.color : undefined) ?? palette[seriesIndex % palette.length];
@@ -215,6 +246,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
             const x = pointX(index);
             const y = scale(value);
             run.push({ x, y });
+            if (value < domain.min || value > domain.max) return;
             const dot = options.points ? svgElement('circle', {
               cx: x, cy: y, r: 3.5, fill: theme.background,
               stroke: datum.color ?? color, 'stroke-width': 2, 'aria-hidden': 'true',
@@ -233,9 +265,20 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
               pointLayer.append(dot);
             }
             pointLayer.append(hit);
-            if (options.values) pointLayer.append(svgText(formatTick(value), x, y - 11, { 'text-anchor': 'middle', fill: theme.strong, 'font-size': 10 }));
+            if (!mini && options.values) pointLayer.append(svgText(formatTick(value), x, y - 11, { 'text-anchor': 'middle', fill: theme.strong, 'font-size': 10 }));
           });
           if (run.length) runs.push(run);
+          if (options.fill && runs.some(points => points.length > 1)) {
+            const gradientId = `${chartId}-fill-${seriesIndex}`;
+            const gradient = svgElement('linearGradient', { id: gradientId, gradientUnits: 'userSpaceOnUse', x1: 0, x2: 0, y1: top, y2: top + plotHeight });
+            gradient.append(svgElement('stop', { offset: '0%', 'stop-color': color, 'stop-opacity': 0.26 }), svgElement('stop', { offset: '100%', 'stop-color': color, 'stop-opacity': 0.02 }));
+            definitions.append(gradient);
+            const area = svgElement('path', {
+              d: runs.filter(points => points.length > 1).map(points => `${linePath(points, options.curve!)}L${points.at(-1)!.x},${baseline}L${points[0].x},${baseline}Z`).join(''),
+              fill: `url(#${gradientId})`, 'data-charto-area': '', 'aria-hidden': 'true', 'pointer-events': 'none',
+            });
+            fillLayer.append(area);
+          }
           const d = runs.map(points => linePath(points, options.curve!)).join('');
           if (d) {
             const path = svgElement('path', {
@@ -243,7 +286,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
               'stroke-linecap': 'round', 'stroke-linejoin': options.curve === 'linear' ? 'miter' : 'round',
               'data-charto-line': '', 'aria-hidden': 'true', pathLength: 1,
             });
-            nextSvg.append(path);
+            lineLayer.append(path);
             if (animate && options.animate && !motion.matches && typeof path.animate === 'function') {
               animations.push(path.animate([
                 { strokeDasharray: '1', strokeDashoffset: '1', opacity: 0.3 },
@@ -253,6 +296,9 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
           }
         }
         nextSvg.append(pointLayer);
+        if (options.fill && animate && options.animate && !motion.matches && typeof fillLayer.animate === 'function') {
+          animations.push(fillLayer.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 700, fill: 'backwards' }));
+        }
         if (animate && options.animate && !motion.matches && typeof pointLayer.animate === 'function') {
           animations.push(pointLayer.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 400, delay: 180, fill: 'backwards' }));
         }
@@ -262,19 +308,17 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
         const gap = stacked ? 0 : Math.min(4, groupSize * 0.08);
         const barSize = stacked ? groupSize : Math.max(0.2, (groupSize - gap * (seriesCount - 1)) / seriesCount);
         const labelStep = Math.max(1, Math.ceil((horizontal ? 24 : 44) / band));
-        const definitions = svgElement('defs');
-        if (stacked) nextSvg.append(definitions);
         options.data.forEach((datum, index) => {
           const center = (horizontal ? top : left) + band * (index + 0.5);
-          if (options.labels && index % labelStep === 0) nextSvg.append(horizontal
+          if (!mini && options.labels && index % labelStep === 0) nextSvg.append(horizontal
             ? svgText(shorten(datum.label, Math.floor((left - 14) / 6.5)), left - 14, center + 4, { 'text-anchor': 'end' })
             : svgText(shorten(datum.label, Math.max(4, Math.floor(band * labelStep / 6.5))), center, height - 12, { 'text-anchor': 'middle' }));
           const datumValues = valuesOf(datum);
           const positions = segments(datumValues, stacked);
           const stack = stacked ? svgElement('g', { 'data-charto-stack': '' }) : undefined;
           if (stack) {
-            const low = positions.reduce((min, segment) => Math.min(min, segment.end), 0);
-            const high = positions.reduce((max, segment) => Math.max(max, segment.end), 0);
+            const low = clamp(positions.reduce((min, segment) => Math.min(min, segment.end), 0));
+            const high = clamp(positions.reduce((max, segment) => Math.max(max, segment.end), 0));
             const length = Math.abs(scale(high) - scale(low));
             if (options.radius! > 0 && length > 0) {
               const id = `${chartId}-stack-${index}`;
@@ -289,7 +333,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
               definitions.append(clip);
               stack.setAttribute('clip-path', `url(#${id})`);
             }
-            stack.style.transformOrigin = horizontal ? `${scale(0)}px ${center}px` : `${center}px ${scale(0)}px`;
+            stack.style.transformOrigin = horizontal ? `${baseline}px ${center}px` : `${center}px ${baseline}px`;
             nextSvg.append(stack);
             if (animate && options.animate && !motion.matches && typeof stack.animate === 'function') {
               animations.push(stack.animate([
@@ -300,8 +344,10 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
           }
           datumValues.forEach((value, seriesIndex) => {
             const segment = positions[seriesIndex];
-            const start = scale(segment.start);
-            const end = scale(segment.end);
+            if (Math.max(segment.start, segment.end) < domain.min || Math.min(segment.start, segment.end) > domain.max) return;
+            const start = scale(clamp(segment.start));
+            const end = scale(clamp(segment.end));
+            if (start === end && value !== 0) return;
             const offset = center - groupSize / 2 + (stacked ? 0 : seriesIndex * (barSize + gap));
             const color = datum.color ?? options.series?.[seriesIndex]?.color ?? (seriesIndex === 0 ? options.color : undefined) ?? palette[seriesIndex % palette.length];
             const x = horizontal ? Math.min(start, end) : offset;
@@ -316,7 +362,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
               tabindex: marks.length === 0 ? 0 : -1, role: 'img', 'aria-label': description,
               'data-charto-bar': '',
             });
-            rect.style.cssText = `cursor:default;outline:none;transform-origin:${horizontal ? scale(0) : x}px ${horizontal ? y : scale(0)}px`;
+            rect.style.cssText = `cursor:default;outline:none;transform-origin:${horizontal ? baseline : x}px ${horizontal ? y : baseline}px`;
             attachInteraction(rect, index, seriesIndex, name, value);
             (stack ?? nextSvg).append(rect);
             if (!stacked && animate && options.animate && !motion.matches && typeof rect.animate === 'function') {
@@ -325,7 +371,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
                 { transform: horizontal ? 'scaleX(1)' : 'scaleY(1)', opacity: 1 },
               ], { duration: 720, delay: Math.min(index * 35 + seriesIndex * 25, 350), easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }));
             }
-            if (options.values && !stacked) nextSvg.append(horizontal
+            if (!mini && options.values && !stacked) nextSvg.append(horizontal
               ? svgText(formatTick(value), end + (value >= 0 ? 8 : -8), y + barHeight / 2 + 4, { 'text-anchor': value >= 0 ? 'start' : 'end', fill: theme.strong, 'font-size': 10 })
               : svgText(formatTick(value), x + barWidth / 2, end + (value >= 0 ? -8 : 15), { 'text-anchor': 'middle', fill: theme.strong, 'font-size': 10 }));
           });
@@ -363,9 +409,11 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
   return {
     update(patch) {
       if (destroyed) return;
-      const next = withDefaults({ ...options, ...patch }, isLine);
+      const nextSettings = { ...settings, ...patch };
+      const next = withDefaults(nextSettings, isLine);
       validateChart(next, isLine);
       options = next;
+      settings = nextSettings;
       render(true);
     },
     replay() { render(true); },

@@ -30,6 +30,22 @@
 #example-linear,#example-smooth{margin-top:14px}
 #click-feedback{overflow-wrap:anywhere;line-height:1.5}
 .chart-footnote{height:auto;min-height:45px;padding-block:8px}
+.extra-controls{grid-column:1/-1;border-top:1px solid var(--border);margin-top:20px;padding-top:16px}
+.extra-controls summary{cursor:pointer;color:#52525b;font-size:10px;list-style-position:inside}
+.extra-controls .control-field{margin-top:18px;margin-bottom:16px}
+.scale-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.scale-fields label{display:block;font-size:9px;color:#71717a;margin-bottom:7px}
+.scale-fields input{width:100%;min-width:0;border:1px solid #e4e4e7;background:#fff;color:#27272a;padding:8px;border-radius:6px;font-size:11px}
+#scale-error{color:#d83255;font-size:10px;line-height:1.5;margin-top:10px}
+.chart-card.compact-card{min-height:0}
+.compact-card #main-chart{margin-block:18px}
+.mini-example-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin-top:22px}
+.mini-example-card{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:25px 28px;border:1px solid var(--border);border-radius:12px}
+.mini-example-card h3{font-size:11px;font-weight:400;color:#71717a;margin-top:12px}
+.mini-example-card strong{display:block;font-size:28px;font-weight:500;letter-spacing:-1px;margin-top:6px}
+.mini-example-card small{font-size:10px;letter-spacing:0;color:#8a8a93;font-weight:400}
+.mini-example-card>div:last-child{width:45%;min-width:0}
+@media(max-width:650px){.mini-example-grid{grid-template-columns:1fr;gap:16px}.mini-example-card{padding:22px}.extra-controls .toggle-row{display:flex}}
 @media(max-width:800px){.playground-header-actions{gap:10px}.playground-header-actions .live-indicator{display:none}.line-style-note{display:none}.family-switch button{padding:5px 9px;font-size:10px}}
 @media(max-width:650px){.hero h1{font-size:52px}.hero-asterisk{right:-36px;font-size:28px}.line-example .example-meta{flex-wrap:wrap;gap:6px}}
 @media(max-width:370px){.hero h1{font-size:44px}.hero-asterisk{right:-29px;font-size:24px}}

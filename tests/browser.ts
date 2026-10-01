@@ -17,7 +17,7 @@ const createLine = (patch: Partial<LineChartOptions> = {}): LineChart => {
 };
 const line = (): SVGPathElement => fixture.querySelector<SVGPathElement>('[data-charto-line]')!;
 const points = (): SVGCircleElement[] => [...fixture.querySelectorAll<SVGCircleElement>('[data-charto-point]')];
-async function rasterize(instance: BarChart): Promise<(x: number, y: number) => boolean> {
+async function rasterize(instance: { toSVG(): string }): Promise<(x: number, y: number) => boolean> {
   const url = URL.createObjectURL(new Blob([instance.toSVG()], { type: 'image/svg+xml' }));
   try {
     const image = new Image();
@@ -372,6 +372,110 @@ await test('clickable SVG exports remain static images without interactive roles
   const instance = create({ onClick: () => {} });
   const xml = new DOMParser().parseFromString(instance.toSVG(), 'image/svg+xml');
   assert(!xml.querySelector('[role=button], [tabindex], [onclick], script') && xml.querySelectorAll('[data-charto-bar]').length === 2, 'export contains interactive state or lost bars');
+});
+await test('line fill exports a visible gradient below the curve and toggles cleanly', async () => {
+  const instance = createLine({ data: [{ label: 'A', value: 70 }, { label: 'B', value: 70 }], fill: true, min: 0, max: 100, grid: false, points: false });
+  const isWhite = await rasterize(instance);
+  assert(!isWhite(320, 201) && isWhite(320, 60), 'area is missing or fills above the line');
+  assert(fixture.querySelector('[data-charto-area]')?.getAttribute('pointer-events') === 'none', 'area intercepts clicks');
+  instance.update({ fill: false });
+  assert(!fixture.querySelector('[data-charto-area], linearGradient'), 'disabled fill left old graphics');
+  assert((await rasterize(instance))(320, 201), 'disabled area still exported');
+});
+await test('filled lines close at zero for negative data and preserve gaps and series colors', async () => {
+  const instance = createLine({ data: [{ label: 'A', value: -70 }, { label: 'B', value: -70 }], fill: true, min: -100, max: 100, grid: false });
+  const isWhite = await rasterize(instance);
+  assert(!isWhite(320, 201) && isWhite(320, 270), 'negative fill did not close at zero');
+  instance.update({ data: [{ label: 'A', value: [20, 10] }, { label: 'B', value: [30, 20] }, { label: 'Gap', value: [] }, { label: 'D', value: [40, 30] }, { label: 'E', value: [50, 40] }], series: [{ name: 'One', color: '#fa4768' }, { name: 'Two', color: '#9066f4' }] });
+  const areas = [...fixture.querySelectorAll('[data-charto-area]')];
+  assert(areas.length === 2 && areas.every(area => (area.getAttribute('d')!.match(/M/g) ?? []).length === 2), 'fill bridges missing data');
+  assert(fixture.querySelectorAll('linearGradient stop')[0].getAttribute('stop-color') === '#fa4768', 'series fill color incorrect');
+  instance.update({ data: [{ label: 'Only', value: 10 }] });
+  assert(!fixture.querySelector('[data-charto-area]'), 'one point invented an area');
+});
+await test('fill gradients have independent IDs across chart instances and animate accessibly', () => {
+  const instance = createLine({ fill: true, animate: true });
+  const other = lineChart(fixture, { data: [{ label: 'A', value: 1 }, { label: 'B', value: 2 }], fill: true, animate: false });
+  try {
+    const gradients = [...fixture.querySelectorAll('linearGradient')];
+    assert(gradients.length === 2 && gradients[0].id !== gradients[1].id, 'gradient IDs collide');
+    const group = fixture.querySelector('[data-charto-fills]')!;
+    assert(group.getAnimations().length === (matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1), 'fill animation ignores motion preference');
+    instance.update({ animate: false });
+    assert(fixture.querySelector('[data-charto-fills]')!.getAnimations().length === 0, 'fill animation remains enabled');
+  } finally { other.destroy(); }
+});
+await test('compact bars and lines fit small containers without axes and keep clicks and data tables', () => {
+  for (const factory of [create, createLine]) {
+    fixture.style.width = '96px';
+    let clicked = false;
+    const instance = factory({ compact: true, height: undefined, values: true, onClick: () => { clicked = true; } });
+    const svg = fixture.querySelector('svg')!;
+    assert(svg.getAttribute('height') === '80' && svg.getAttribute('viewBox') === '0 0 96 80', 'compact defaults do not fit');
+    assert(!svg.querySelector('text, line') && fixture.querySelector('table')?.textContent?.includes('40'), 'compact axes remain or data was removed');
+    fixture.querySelector('[role=button]')!.dispatchEvent(new MouseEvent('click'));
+    assert(clicked && fixture.scrollWidth <= 96, 'compact interaction or layout failed');
+    instance.update({ compact: false, values: false });
+    assert(fixture.querySelector('svg')?.getAttribute('height') === '320' && fixture.querySelector('svg text'), 'normal layout did not return');
+    instance.update({ compact: true, data: [] });
+    assert(!fixture.querySelector('svg text') && fixture.scrollWidth <= 96, 'empty mini chart overflows with text');
+    instance.destroy();
+  }
+});
+await test('tooltips can be disabled or formatted as plain text without changing click behavior', () => {
+  for (const factory of [create, createLine]) {
+    let clicks = 0;
+    const instance = factory({ tooltip: false, onClick: () => { clicks++; } });
+    let mark = fixture.querySelector<SVGGraphicsElement>('[role=button]')!;
+    mark.focus();
+    mark.dispatchEvent(new PointerEvent('pointerenter'));
+    mark.dispatchEvent(new MouseEvent('click'));
+    assert(fixture.querySelector<HTMLElement>('[role=tooltip]')!.hidden && clicks === 1, 'disabled tooltip affected click or is visible');
+    instance.update({ tooltip: point => `<b>${point.label}</b> · ${point.value} / ${point.seriesIndex}` });
+    mark = fixture.querySelector<SVGGraphicsElement>('[role=button]')!;
+    mark.focus();
+    const tooltip = fixture.querySelector<HTMLElement>('[role=tooltip]')!;
+    assert(tooltip.textContent === '<b>A</b> · 20 / 0' && !tooltip.querySelector('b'), 'custom tooltip interpreted HTML or lost context');
+    instance.update({ tooltip: () => '' });
+    fixture.querySelector<SVGGraphicsElement>('[role=button]')!.focus();
+    assert(tooltip.hidden, 'empty tooltip text produced a box');
+    instance.update({ tooltip: undefined });
+    fixture.querySelector<SVGGraphicsElement>('[role=button]')!.focus();
+    assert(tooltip.textContent === 'A\n20', 'default tooltip did not return');
+    instance.destroy();
+  }
+});
+await test('fixed scales clip bars at the visible bounds in both orientations', () => {
+  const instance = create({ data: [{ label: 'Below', value: 20 }, { label: 'Inside', value: 70 }, { label: 'Above', value: 140 }], min: 50, max: 100 });
+  for (const orientation of ['vertical', 'horizontal'] as const) {
+    instance.update({ orientation });
+    assert(bars().length === 2, 'fully clipped bar remains');
+    for (const bar of bars()) {
+      const start = Number(bar.getAttribute(orientation === 'vertical' ? 'y' : 'x'));
+      const length = Number(bar.getAttribute(orientation === 'vertical' ? 'height' : 'width'));
+      assert(start >= 24 && start + length <= (orientation === 'vertical' ? 284 : 616), 'bar extends beyond plot');
+    }
+  }
+  instance.update({ mode: 'stacked', orientation: 'vertical', data: [{ label: 'A', value: [60, 80] }], radius: 8 });
+  assert(bars().length === 2 && Number(bars()[1].getAttribute('y')) === 24, 'stack was not clipped at maximum');
+});
+await test('fixed line scales clip paths and omit out-of-range point targets while preserving table data', () => {
+  const instance = createLine({ data: [{ label: 'Low', value: -100 }, { label: 'Middle', value: 50 }, { label: 'High', value: 200 }], min: 0, max: 100, fill: true });
+  assert(points().length === 1 && points()[0].getAttribute('aria-label') === 'Middle: 50', 'out-of-range points remain interactive');
+  assert(line().parentElement?.getAttribute('clip-path') && fixture.querySelector('table')?.textContent?.includes('200'), 'line is unclipped or raw data lost');
+  instance.update({ min: undefined, max: undefined });
+  assert(points().length === 3 && !line().parentElement?.getAttribute('clip-path'), 'automatic scale did not return');
+  instance.update({ min: 0, max: 1e-300, data: [{ label: 'A', value: -1e100 }, { label: 'B', value: 1e100 }] });
+  assert(!/NaN|Infinity/.test(instance.toSVG()), 'extreme out-of-range values produced invalid coordinates');
+});
+await test('invalid scale and tooltip updates preserve the previous chart', () => {
+  const instance = createLine({ fill: true });
+  const before = instance.toSVG();
+  for (const patch of [{ min: 100, max: 0 }, { min: NaN }, { max: Infinity }, { tooltip: 'invalid' }]) {
+    let threw = false;
+    try { instance.update(patch as Partial<LineChartOptions>); } catch { threw = true; }
+    assert(threw && instance.toSVG() === before, 'invalid options replaced the chart');
+  }
 });
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;
 document.title = `Charto: ${passed} passed, ${failed} failed`;

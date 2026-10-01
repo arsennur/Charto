@@ -59,3 +59,33 @@ test('valid empty and multi-series data are accepted', () => {
   assert.doesNotThrow(() => validate({ data: [] }));
   assert.doesNotThrow(() => validate({ data: [{ label: 'A', value: [3, 0, -4] }, { label: 'B', value: [] }] }));
 });
+test('fixed bounds stay exact and produce readable ticks inside the range', () => {
+  for (const [min, max] of [[0, 100], [17, 93], [-100, -10], [-30, 80], [0.01, 0.09], [1e99, 1.1e99]]) {
+    const domain = getDomain([{ label: 'A', value: [-500, 500] }], true, { min, max });
+    assert.equal(domain.min, min);
+    assert.equal(domain.max, max);
+    assert.equal(domain.ticks[0], min);
+    assert.equal(domain.ticks.at(-1), max);
+    assert.ok(domain.ticks.every(value => Number.isFinite(value) && value >= min && value <= max));
+    assert.ok(domain.ticks.length >= 2 && domain.ticks.length <= 10);
+  }
+});
+test('single bounds adapt the automatic end even when all data is outside', () => {
+  const data = [{ label: 'A', value: 20 }];
+  const lower = getDomain(data, false, { min: 50 });
+  assert.equal(lower.min, 50);
+  assert.ok(lower.max > 50);
+  const upper = getDomain(data, false, { max: -50 });
+  assert.equal(upper.max, -50);
+  assert.ok(upper.min < -50);
+  const empty = getDomain([], false, { min: 20, max: 100 });
+  assert.equal(empty.min, 20);
+  assert.equal(empty.max, 100);
+});
+test('scale bounds reject invalid values and compact mode permits small heights', () => {
+  for (const limits of [{ min: NaN }, { max: Infinity }, { min: -1e101 }, { min: 20, max: 10 }, { min: 10, max: 10 }]) {
+    assert.throws(() => validate({ data: [], ...limits }), /min|max/);
+  }
+  assert.doesNotThrow(() => validate({ data: [], compact: true, height: 32 }));
+  assert.throws(() => validate({ data: [], compact: true, height: 31 }), /height/);
+});
