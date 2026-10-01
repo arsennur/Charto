@@ -14,7 +14,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/arsennur/Charto.git"
+    "url": "git+https://github.com/arsennur/Charto.git"
   },
   "homepage": "https://github.com/arsennur/Charto#readme",
   "bugs": "https://github.com/arsennur/Charto/issues",
