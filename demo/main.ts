@@ -100,7 +100,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
     </section>
 
-    <section id="quick-start" class="quick-start" aria-labelledby="quick-start-title"><div class="quick-copy"><div class="eyebrow"><span class="small-line"></span> SMALL API. BIG LITTLE DETAILS.</div><h2 id="quick-start-title">A few lines.<br>That's it.</h2><p>Give it a home and some data.<br>We'll take care of the good-looking part.</p><div class="feature-checks"><span>${icon('check', 14)} Any framework</span><span>${icon('check', 14)} TypeScript ready</span><span>${icon('check', 14)} Keyboard accessible</span></div><button id="open-docs" class="docs-button" aria-expanded="false" aria-controls="api-docs">Explore the API ${icon('right')}</button></div><div class="quick-code"><div class="code-filename"><span><i></i> hello-charto.ts</span><button id="copy-quick" class="text-button" aria-label="Copy quick start code">${icon('copy', 15)} Copy</button></div><pre><code><span class="syntax-purple">import</span> { lineChart } <span class="syntax-purple">from</span> <span class="syntax-green">'charto'</span>;
+    <section id="quick-start" class="quick-start" aria-labelledby="quick-start-title"><div class="quick-copy"><div class="eyebrow"><span class="small-line"></span> SMALL API. BIG LITTLE DETAILS.</div><h2 id="quick-start-title">A few lines.<br>That's it.</h2><p>Give it a home and some data.<br>We'll take care of the good-looking part.</p><div class="feature-checks"><span>${icon('check', 14)} Any framework</span><span>${icon('check', 14)} TypeScript ready</span><span>${icon('check', 14)} Keyboard accessible</span></div><button id="open-docs" class="docs-button" aria-expanded="false" aria-controls="api-docs">Explore the API ${icon('right')}</button></div><div class="quick-code"><div class="code-filename"><span><i></i> hello-charto.ts</span><button id="copy-quick" class="text-button" aria-label="Copy quick start code">${icon('copy', 15)} Copy</button></div><pre><code><span class="syntax-purple">import</span> { lineChart } <span class="syntax-purple">from</span> <span class="syntax-green">'@arsennur/charto'</span>;
 
 <span class="syntax-muted">// A small chart with a little character.</span>
 <span class="syntax-purple">const</span> chart = <span class="syntax-function">lineChart</span>(<span class="syntax-green">'#chart'</span>, {
@@ -190,7 +190,7 @@ function getOptions(): BarChartOptions & LineChartOptions {
 function codeForState(): string {
   const options = getOptions();
   const factory = state.family === 'line' ? 'lineChart' : 'barChart';
-  const lines = [`import { ${factory} } from 'charto';`, '', `const chart = ${factory}('#chart', {`, '  data: [', ...currentData.map(datum => `    { label: '${datum.label}', value: ${JSON.stringify(datum.value)} },`), '  ],', `  color: '${options.color}',`];
+  const lines = [`import { ${factory} } from '@arsennur/charto';`, '', `const chart = ${factory}('#chart', {`, '  data: [', ...currentData.map(datum => `    { label: '${datum.label}', value: ${JSON.stringify(datum.value)} },`), '  ],', `  color: '${options.color}',`];
   if (options.series) lines.push('  series: ' + JSON.stringify(options.series) + ',');
   if (state.family === 'bar' && options.orientation === 'horizontal') lines.push("  orientation: 'horizontal',");
   if (state.family === 'bar' && options.mode === 'stacked') lines.push("  mode: 'stacked',");

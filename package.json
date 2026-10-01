@@ -1,5 +1,5 @@
 {
-  "name": "charto",
+  "name": "@arsennur/charto",
   "version": "0.2.0",
   "description": "Small, thoughtful SVG bar and line charts. Zero runtime dependencies.",
   "license": "MIT",

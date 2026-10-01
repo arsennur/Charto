@@ -1,4 +1,4 @@
-import { barChart, lineChart, type BarDatum, type BarChartOptions, type ChartClickEvent, type ChartPoint, type LineChartOptions } from 'charto';
+import { barChart, lineChart, type BarDatum, type BarChartOptions, type ChartClickEvent, type ChartPoint, type LineChartOptions } from '@arsennur/charto';
 
 const data: BarDatum[] = [{ label: 'Mon', value: [10, 20] }];
 const tooltip = (point: ChartPoint): string => `${point.label}: ${point.value}`;

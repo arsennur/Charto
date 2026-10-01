@@ -28,7 +28,7 @@ Charto bir JavaScript paketidir. Ayrı bir sunucu veya CDN gerekmez: uygulamanı
 ### npm'den kurulum
 
 ```sh
-npm install charto
+npm install @arsennur/charto
 ```
 
 Paket önceden derlenmiş JavaScript ve TypeScript bildirimleriyle gelir; çalışma zamanında ek bağımlılık gerekmez.
@@ -48,7 +48,7 @@ Git kurulumunda `prepare` script'i kütüphaneyi derler. Kurulum sırasında gel
 ```
 
 ```ts
-import { barChart } from 'charto';
+import { barChart } from '@arsennur/charto';
 
 const chart = barChart('#chart', {
   data: [
@@ -84,7 +84,7 @@ Yayımladığınız sürümleri ve etiketleri değiştirmeyin; her güncellemeyi
 ### Line chart: keskin veya kıvrımlı
 
 ```ts
-import { lineChart } from 'charto';
+import { lineChart } from '@arsennur/charto';
 
 const chart = lineChart('#chart', {
   data: [
@@ -255,7 +255,7 @@ React örneği:
 
 ```tsx
 import { useEffect, useRef } from 'react';
-import { barChart, type BarChart, type BarDatum } from 'charto';
+import { barChart, type BarChart, type BarDatum } from '@arsennur/charto';
 
 export function SalesChart({ data }: { data: BarDatum[] }) {
   const container = useRef<HTMLDivElement>(null);
