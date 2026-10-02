@@ -1,7 +1,7 @@
 import { barChart, lineChart, type BarDatum, type BarChartOptions, type ChartClickEvent, type ChartPoint, type LineChartOptions } from '@arsennur/charto';
 
 const data: BarDatum[] = [{ label: 'Mon', value: [10, 20] }];
-const tooltip = (point: ChartPoint): string => `${point.label}: ${point.value}`;
+const tooltip = (point: ChartPoint): string => `${point.label}: ${point.value ?? '—'}`;
 const options: BarChartOptions = { data, theme: 'dark', mode: 'stacked', radius: 8, compact: true, height: 60, min: 0, max: 100, tooltip };
 const chart = barChart(document.createElement('div'), options);
 const onClick = (event: ChartClickEvent): void => {
@@ -32,3 +32,14 @@ barChart('#chart', { data, onClick: (value: number) => console.log(value) });
 lineChart('#chart', { data, tooltip: () => document.createElement('div') });
 // @ts-expect-error Gradient fill belongs to line charts.
 barChart('#chart', { data, fill: true });
+
+const missingData: BarDatum[] = [{ label: 'A', value: null }, { label: 'B', value: [1, null] }];
+const styled: BarChartOptions = { data: missingData, missing: 'none', values: true, colors: { text: 'var(--muted)', grid: '#eee' }, series: [{ name: 'Projected', pattern: 'hatched' }] };
+barChart('#chart', styled);
+lineChart('#chart', { data: missingData, colors: { background: 'var(--card)' } });
+// @ts-expect-error Placeholders belong to bar charts.
+lineChart('#chart', { data, missing: 'none' });
+// @ts-expect-error Patterns belong to bar series.
+lineChart('#chart', { data, series: [{ name: 'A', pattern: 'hatched' }] });
+// @ts-expect-error A click always carries a number, never a placeholder's null.
+barChart('#chart', { data, onClick: (event: ChartClickEvent & { value: null }) => event });

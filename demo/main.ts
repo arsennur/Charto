@@ -112,7 +112,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   curve: <span class="syntax-green">'smooth'</span>,
   color: <span class="syntax-green">'#27bd83'</span>,
 });</code></pre><div class="quick-code-footer">No providers. No stylesheet imports. Just charts.<span>ESM</span></div></div></section>
-    <section id="api-docs" class="api-docs" hidden aria-label="API documentation"><div><h3>Bring Charto into your project</h3><p>This is a local package. Run <code>npm pack</code> in this project, install the generated <code>.tgz</code> in your app, then import <code>barChart</code> or <code>lineChart</code>. It has no runtime dependencies. In a plain HTML page, import the built <code>dist/charto.js</code> directly.</p><p>Create a container such as <code>&lt;div id="chart"&gt;&lt;/div&gt;</code>. Create your chart after it mounts and <code>chart.destroy()</code> when it unmounts.</p></div><div><h3>Two charts. One familiar API.</h3><dl><dt>data</dt><dd>Labels and values. Use value arrays for multiple series.</dd><dt>series</dt><dd>Names and colors for multiple series.</dd><dt>onClick</dt><dd>Handle a bar, segment, or point click with its value, category, and series.</dd><dt>curve / strokeWidth / points / fill</dt><dd>Line style, thickness, markers, and gradient fill.</dd><dt>compact</dt><dd>Small charts without axes, grid, or labels.</dd><dt>tooltip</dt><dd>true, false, or a function returning tooltip text.</dd><dt>min / max</dt><dd>Fixed scale boundaries. Omit for automatic scaling.</dd><dt>orientation / mode</dt><dd>vertical or horizontal; grouped or stacked.</dd><dt>color / theme / radius</dt><dd>Your visual language, with thoughtful defaults.</dd><dt>animate / grid / labels / values</dt><dd>Simple switches for motion and detail.</dd><dt>height / label / formatValue</dt><dd>Chart height, accessible name, and number formatting.</dd></dl><p><code>chart.update(options)</code> · <code>chart.replay()</code><br><code>chart.toSVG()</code> · <code>chart.destroy()</code></p><p>Stacked bars round the outer corners and keep internal joins flush. Set radius to 0 for square corners.</p></div></section>
+    <section id="api-docs" class="api-docs" hidden aria-label="API documentation"><div><h3>Bring Charto into your project</h3><p>This is a local package. Run <code>npm pack</code> in this project, install the generated <code>.tgz</code> in your app, then import <code>barChart</code> or <code>lineChart</code>. It has no runtime dependencies. In a plain HTML page, import the built <code>dist/charto.js</code> directly.</p><p>Create a container such as <code>&lt;div id="chart"&gt;&lt;/div&gt;</code>. Create your chart after it mounts and <code>chart.destroy()</code> when it unmounts.</p></div><div><h3>Two charts. One familiar API.</h3><dl><dt>data</dt><dd>Labels and values. Use value arrays for multiple series.</dd><dt>series</dt><dd>Names and colors for multiple series.</dd><dt>onClick</dt><dd>Handle a bar, segment, or point click with its value, category, and series.</dd><dt>curve / strokeWidth / points / fill</dt><dd>Line style, thickness, markers, and gradient fill.</dd><dt>compact</dt><dd>Small charts without axes, grid, or labels.</dd><dt>tooltip</dt><dd>true, false, or a function returning tooltip text.</dd><dt>min / max</dt><dd>Fixed scale boundaries. Omit for automatic scaling.</dd><dt>orientation / mode</dt><dd>vertical or horizontal; grouped or stacked.</dd><dt>color / theme / colors / radius</dt><dd>Your visual language, with thoughtful defaults. Every colour can be a CSS variable.</dd><dt>pattern / missing</dt><dd>Hatched series for projections; a dashed stub for a null value that is not zero.</dd><dt>animate / grid / labels / values</dt><dd>Simple switches for motion and detail. On a stack, values is its total.</dd><dt>height / label / formatValue</dt><dd>Chart height, accessible name, and number formatting.</dd></dl><p><code>chart.update(options)</code> · <code>chart.replay()</code><br><code>chart.toSVG()</code> · <code>chart.destroy()</code></p><p>Stacked bars round the outer corners and keep internal joins flush. Set radius to 0 for square corners.</p></div></section>
   </main>
   <footer class="site-footer"><a href="#" class="brand">${logo}<span>charto.</span></a><span>A small thing, made with care.</span><span>Less code. More clarity.</span></footer>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -152,7 +152,7 @@ function dataForState(): BarDatum[] {
   });
 }
 function customTooltip({ label, value, seriesName }: ChartPoint): string {
-  return `${label}${seriesName === 'Value' ? '' : ' · ' + seriesName}\n${state.dataset === 'revenue' ? '$' : ''}${value.toLocaleString('en')}\nClick to view details`;
+  return `${label}${seriesName === 'Value' ? '' : ' · ' + seriesName}\n${state.dataset === 'revenue' ? '$' : ''}${value?.toLocaleString('en') ?? '—'}\nClick to view details`;
 }
 function getOptions(): BarChartOptions & LineChartOptions {
   const multiple = state.family === 'bar' && (state.kind === 'grouped' || state.kind === 'stacked');
@@ -223,12 +223,12 @@ function render(): void {
   $('#chart-card').classList.toggle('dark', state.theme === 'dark');
   $('#chart-card').classList.toggle('compact-card', state.compact);
   $('#chart-legend').hidden = state.compact;
-  const total = currentData.reduce((sum, datum) => sum + (Array.isArray(datum.value) ? datum.value.reduce((a, b) => a + b, 0) : datum.value), 0);
+  const total = currentData.reduce((sum, datum) => sum + (Array.isArray(datum.value) ? datum.value.reduce<number>((a, b) => a + (b ?? 0), 0) : datum.value ?? 0), 0);
   const names = { revenue: 'Revenue', visitors: 'Visitors', subscriptions: 'Subscriptions' };
   $('#chart-title').textContent = `${names[state.dataset]} overview`;
   $('#metric').textContent = (state.dataset === 'revenue' ? '$' : '') + total.toLocaleString('en');
   $('#metric-caption').textContent = state.period === 'monthly' ? 'A good year in the making.' : 'Small steps. A pretty good week.';
-  const values = currentData.map(datum => Array.isArray(datum.value) ? datum.value.reduce((a, b) => a + b, 0) : datum.value);
+  const values = currentData.map(datum => Array.isArray(datum.value) ? datum.value.reduce<number>((a, b) => a + (b ?? 0), 0) : datum.value ?? 0);
   const previous = values.at(-2) ?? 1;
   const change = previous === 0 ? 0 : (values.at(-1)! - previous) / previous * 100;
   $('#growth').textContent = `${change >= 0 ? '↗' : '↘'} ${Math.abs(change).toFixed(1)}%`;

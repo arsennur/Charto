@@ -15,6 +15,11 @@ const createLine = (patch: Partial<LineChartOptions> = {}): LineChart => {
   chart = lineChart(fixture, { data: [{ label: 'A', value: 20 }, { label: 'B', value: 40 }, { label: 'C', value: 10 }], animate: false, ...patch });
   return chart;
 };
+const paint = (node: Element, property: string): string => (node as SVGElement).style.getPropertyValue(property);
+/** A colour as the browser serialises it (#fa4768 → rgb(250, 71, 104)). */
+const css = (value: string): string => { const probe = document.createElement('span'); probe.style.color = value; return probe.style.color; };
+const hover = (node: Element): void => { node.dispatchEvent(new PointerEvent('pointerenter', { clientX: 10, clientY: 10 })); };
+const missing = (): SVGRectElement[] => [...fixture.querySelectorAll<SVGRectElement>('[data-charto-missing]')];
 const line = (): SVGPathElement => fixture.querySelector<SVGPathElement>('[data-charto-line]')!;
 const points = (): SVGCircleElement[] => [...fixture.querySelectorAll<SVGCircleElement>('[data-charto-point]')];
 async function rasterize(instance: { toSVG(): string }): Promise<(x: number, y: number) => boolean> {
@@ -226,7 +231,7 @@ await test('hidden line markers preserve tooltips, keyboard access, and clean SV
 await test('line series receive independent colors and paths', () => {
   createLine({ data: [{ label: 'A', value: [20, 10] }, { label: 'B', value: [40, 30] }], series: [{ name: 'First', color: '#fa4768' }, { name: 'Second', color: '#9066f4' }] });
   const paths = [...fixture.querySelectorAll('[data-charto-line]')];
-  assert(paths.length === 2 && paths[0].getAttribute('stroke') === '#fa4768' && paths[1].getAttribute('stroke') === '#9066f4', 'series colors missing');
+  assert(paths.length === 2 && paint(paths[0], 'stroke') === css('#fa4768') && paint(paths[1], 'stroke') === css('#9066f4'), 'series colors missing');
 });
 await test('missing line values produce gaps instead of invented zero values', () => {
   createLine({ data: [{ label: 'A', value: 20 }, { label: 'B', value: [] }, { label: 'C', value: 40 }] });
@@ -389,7 +394,7 @@ await test('filled lines close at zero for negative data and preserve gaps and s
   instance.update({ data: [{ label: 'A', value: [20, 10] }, { label: 'B', value: [30, 20] }, { label: 'Gap', value: [] }, { label: 'D', value: [40, 30] }, { label: 'E', value: [50, 40] }], series: [{ name: 'One', color: '#fa4768' }, { name: 'Two', color: '#9066f4' }] });
   const areas = [...fixture.querySelectorAll('[data-charto-area]')];
   assert(areas.length === 2 && areas.every(area => (area.getAttribute('d')!.match(/M/g) ?? []).length === 2), 'fill bridges missing data');
-  assert(fixture.querySelectorAll('linearGradient stop')[0].getAttribute('stop-color') === '#fa4768', 'series fill color incorrect');
+  assert(paint(fixture.querySelectorAll('linearGradient stop')[0], 'stop-color') === css('#fa4768'), 'series fill color incorrect');
   instance.update({ data: [{ label: 'Only', value: 10 }] });
   assert(!fixture.querySelector('[data-charto-area]'), 'one point invented an area');
 });
@@ -475,6 +480,103 @@ await test('invalid scale and tooltip updates preserve the previous chart', () =
     let threw = false;
     try { instance.update(patch as Partial<LineChartOptions>); } catch { threw = true; }
     assert(threw && instance.toSVG() === before, 'invalid options replaced the chart');
+  }
+});
+await test('a hatched series draws stripes inside an outline, in stacks too', () => {
+  create({ mode: 'stacked', data: [{ label: 'A', value: [20, 10] }], series: [{ name: 'Actual', color: '#10b981' }, { name: 'Projected', color: '#10b981', pattern: 'hatched' }] });
+  const [solid, hatched] = bars();
+  assert(paint(solid, 'fill') === css('#10b981') && !paint(solid, 'stroke'), 'solid series changed');
+  assert(/^url\("?#charto-\d+-hatch-0"?\)$/.test(paint(hatched, 'fill')) && paint(hatched, 'stroke') === css('#10b981'), 'hatched series has no pattern or outline');
+  const pattern = fixture.querySelector('pattern')!;
+  assert(pattern && paint(pattern.querySelector('rect')!, 'fill') === css('#10b981'), 'pattern stripe colour missing');
+  assert(Math.abs(Number(solid.getAttribute('y')) - Number(hatched.getAttribute('y')) - Number(hatched.getAttribute('height')) - 0.5) < 0.001, 'outline is not inset inside the segment');
+  let threw = false;
+  try { chart!.update({ series: [{ name: 'x', pattern: 'dotted' as 'hatched' }] }); } catch { threw = true; }
+  assert(threw, 'unknown pattern accepted');
+});
+await test('hatched bars survive export as stripes', async () => {
+  const instance = create({ data: [{ label: 'A', value: 100 }], series: [{ name: 'Projected', color: '#000000', pattern: 'hatched' }], grid: false, labels: false, min: 0, max: 100 });
+  const xml = new DOMParser().parseFromString(instance.toSVG(), 'image/svg+xml');
+  assert(xml.querySelector('pattern rect')?.getAttribute('fill') === css('#000000'), 'export lost the pattern colour');
+  const bar = bars()[0].getBBox();
+  const isWhite = await rasterize(instance);
+  let white = 0; let dark = 0;
+  for (let x = bar.x + 3; x < bar.x + bar.width - 3; x++) (isWhite(x, bar.y + bar.height / 2) ? white++ : dark++);
+  assert(white > 0 && dark > 0, 'hatched bar exported as a solid or empty block');
+});
+await test('a null bar is a dashed placeholder: tooltip, no click, dash in the table', () => {
+  let clicks = 0;
+  create({ data: [{ label: 'A', value: 20 }, { label: 'B', value: null }], onClick: () => clicks++ });
+  assert(bars().length === 1 && missing().length === 1, 'placeholder not drawn as its own mark');
+  const stub = missing()[0];
+  assert(paint(stub, 'fill') === 'transparent' && stub.getAttribute('stroke-dasharray') === '3 3', 'placeholder is not dashed');
+  const bottom = Number(stub.getAttribute('y')) + Number(stub.getAttribute('height'));
+  const baseline = Number(bars()[0].getAttribute('y')) + Number(bars()[0].getAttribute('height'));
+  assert(Math.abs(bottom + 0.5 - baseline) < 0.001 && Number(stub.getAttribute('height')) < 14, 'placeholder does not stand on the baseline');
+  stub.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  stub.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert(clicks === 0 && stub.getAttribute('role') === 'img', 'placeholder is clickable');
+  hover(stub);
+  const tip = fixture.querySelector<HTMLElement>('[role=tooltip]')!;
+  assert(!tip.hidden && tip.textContent === 'B\nNo value' && stub.getAttribute('aria-label') === 'B: No value', 'placeholder tooltip missing');
+  assert([...fixture.querySelectorAll('td')].map(td => td.textContent).join(',') === '20,—', 'table invents a value');
+});
+await test('placeholder tooltip formatter receives null; missing none draws nothing', () => {
+  const seen: Array<number | null> = [];
+  const instance = create({ data: [{ label: 'A', value: 20 }, { label: 'B', value: null }], tooltip: point => { seen.push(point.value); return point.value === null ? `${point.label} · awaiting` : ''; } });
+  hover(missing()[0]);
+  assert(seen.includes(null) && fixture.querySelector('[role=tooltip]')!.textContent === 'B · awaiting', 'formatter not called for placeholder');
+  instance.update({ missing: 'none' });
+  assert(missing().length === 0 && bars().length === 1, 'missing none still drew a placeholder');
+});
+await test('grouped, stacked, horizontal and negative-scale placeholders sit in their slot', () => {
+  const instance = create({ data: [{ label: 'A', value: [10, null] }] });
+  const [bar] = bars(); const [stub] = missing();
+  assert(Number(stub.getAttribute('x')) > Number(bar.getAttribute('x')) + Number(bar.getAttribute('width')) - 1, 'grouped placeholder overlaps its neighbour');
+  instance.update({ mode: 'stacked', data: [{ label: 'A', value: [10, null] }, { label: 'B', value: [null, null] }] });
+  assert(bars().length === 1 && missing().length === 1, 'stack with a value drew a placeholder, or an empty stack drew none');
+  instance.update({ mode: 'grouped', orientation: 'horizontal', data: [{ label: 'A', value: 10 }, { label: 'B', value: null }] });
+  assert(Math.abs(Number(missing()[0].getAttribute('x')) - 0.5 - Number(bars()[0].getAttribute('x'))) < 0.001, 'horizontal placeholder off the baseline');
+  instance.update({ orientation: 'vertical', data: [{ label: 'A', value: -10 }, { label: 'B', value: null }] });
+  const svgHeight = 320;
+  const y = Number(missing()[0].getAttribute('y'));
+  assert(y >= 0 && y < svgHeight && Number(missing()[0].getAttribute('y')) > Number(bars()[0].getAttribute('y')) - 1, 'placeholder left the plot on an all-negative scale');
+});
+await test('null line values are gaps', () => {
+  createLine({ data: [{ label: 'A', value: 20 }, { label: 'B', value: null }, { label: 'C', value: 40 }] });
+  assert((line().getAttribute('d')!.match(/M/g) ?? []).length === 2 && points().length === 2 && !missing().length, 'null bridged or placeholder drawn on a line');
+});
+await test('stacked value labels show each stack total', () => {
+  create({ mode: 'stacked', values: true, data: [{ label: 'A', value: [20, 10, 5] }, { label: 'B', value: [7, null] }, { label: 'C', value: [null, null] }] });
+  const totals = [...fixture.querySelectorAll('[data-charto-total]')].map(node => node.textContent);
+  assert(totals.join(',') === '35,7', `wrong totals: ${totals.join(',')}`);
+  const top = Math.min(...bars().slice(0, 3).map(rect => Number(rect.getAttribute('y'))));
+  assert(Number(fixture.querySelector('[data-charto-total]')!.getAttribute('y')) < top, 'total is not above the stack');
+});
+await test('colors override the theme and accept CSS variables, resolved on export', () => {
+  fixture.style.setProperty('--chart-text', 'rgb(1, 2, 3)');
+  fixture.style.setProperty('--chart-grid', 'rgb(4, 5, 6)');
+  fixture.style.setProperty('--chart-bg', 'rgb(7, 8, 9)');
+  fixture.style.setProperty('--chart-bar', 'rgb(10, 11, 12)');
+  try {
+    const instance = create({ color: 'var(--chart-bar)', colors: { text: 'var(--chart-text)', grid: 'var(--chart-grid)', background: 'var(--chart-bg)' }, theme: 'dark' });
+    const svg = fixture.querySelector('svg')!;
+    assert(getComputedStyle(svg).fill === 'rgb(1, 2, 3)', 'text colour not applied');
+    assert(getComputedStyle(fixture.querySelector('line')!).stroke === 'rgb(4, 5, 6)', 'grid colour not applied');
+    assert(getComputedStyle(bars()[0]).fill === 'rgb(10, 11, 12)', 'variable series colour not applied');
+    const tip = fixture.querySelector<HTMLElement>('[role=tooltip]')!;
+    assert(tip.style.background === 'rgb(244, 244, 245)', 'unset keys lost the dark theme');
+    const xml = new DOMParser().parseFromString(instance.toSVG(), 'image/svg+xml');
+    assert(!instance.toSVG().includes('var('), 'export kept a CSS variable');
+    assert(xml.querySelector('rect')?.getAttribute('fill') === 'rgb(7, 8, 9)', 'background variable not resolved');
+    assert(xml.documentElement.getAttribute('fill') === 'rgb(1, 2, 3)', 'text variable not resolved');
+    fixture.style.setProperty('--chart-bar', 'rgb(200, 0, 0)');
+    assert(getComputedStyle(bars()[0]).fill === 'rgb(200, 0, 0)', 'a theme switch needs a re-render');
+    let threw = false;
+    try { instance.update({ colors: { text: 4 as unknown as string } }); } catch { threw = true; }
+    assert(threw, 'non-string colour accepted');
+  } finally {
+    for (const name of ['--chart-text', '--chart-grid', '--chart-bg', '--chart-bar']) fixture.style.removeProperty(name);
   }
 });
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;

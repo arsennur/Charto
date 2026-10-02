@@ -89,3 +89,18 @@ test('scale bounds reject invalid values and compact mode permits small heights'
   assert.doesNotThrow(() => validate({ data: [], compact: true, height: 32 }));
   assert.throws(() => validate({ data: [], compact: true, height: 31 }), /height/);
 });
+test('null is no value: it takes no space on the scale and is an empty segment', () => {
+  const domain = getDomain([{ label: 'A', value: null }, { label: 'B', value: [40, null] }]);
+  assert.equal(domain.min, 0);
+  assert.ok(domain.max >= 40 && domain.max < 80);
+  assert.deepEqual(getDomain([{ label: 'A', value: [30, null, 20] }], true).max >= 50, true);
+  assert.deepEqual(segments([30, null, 20], true), [{ start: 0, end: 30 }, { start: 30, end: 30 }, { start: 30, end: 50 }]);
+  assert.deepEqual(segments([30, null], false), [{ start: 0, end: 30 }, { start: 0, end: 0 }]);
+  assert.doesNotThrow(() => validate({ data: [{ label: 'A', value: null }, { label: 'B', value: [1, null] }] }));
+  assert.throws(() => validate({ data: [{ label: 'A', value: undefined as unknown as number }] }), /values/);
+});
+test('missing and pattern options are validated', () => {
+  assert.doesNotThrow(() => validate({ data: [], missing: 'none', series: [{ name: 'P', pattern: 'hatched' }] }));
+  assert.throws(() => validate({ data: [], missing: 'skip' as 'none' }), /missing/);
+  assert.throws(() => validate({ data: [], series: [{ name: 'P', pattern: 'dots' as 'hatched' }] }), /pattern/);
+});

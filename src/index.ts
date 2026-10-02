@@ -1,7 +1,7 @@
 import { getDomain, segments, validate, valuesOf } from './layout.ts';
 import { linePath, type Point } from './line-path.ts';
-import type { BarChart, BarChartOptions, Chart, LineChart, LineChartOptions } from './types.js';
-export type { BarChart, BarChartOptions, BarDatum, BarSeries, ChartClickEvent, ChartPoint, LineChart, LineChartOptions, LineDatum, LineSeries } from './types.js';
+import type { BarChart, BarChartOptions, Chart, ChartColors, LineChart, LineChartOptions } from './types.js';
+export type { BarChart, BarChartOptions, BarDatum, BarSeries, ChartClickEvent, ChartColors, ChartPoint, DatumValue, LineChart, LineChartOptions, LineDatum, LineSeries } from './types.js';
 
 type Options = BarChartOptions & LineChartOptions;
 
@@ -10,15 +10,28 @@ let chartSequence = 0;
 const palette = ['#27bd83', '#9066f4', '#fa4768', '#ff9e24', '#3982f7'];
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const exact = new Intl.NumberFormat('en', { maximumSignificantDigits: 12 });
-const colors = {
+const colors: Record<'light' | 'dark', ChartColors> = {
   light: { text: '#8a8a93', strong: '#27272a', grid: '#e4e4e7', background: '#ffffff', tooltip: '#18181b', tooltipText: '#ffffff' },
   dark: { text: '#a1a1aa', strong: '#f4f4f5', grid: '#3f3f46', background: '#18181b', tooltip: '#f4f4f5', tooltipText: '#18181b' },
 };
 
+// Colours are written as inline style, not as presentation attributes, so a
+// colour can be a CSS variable (`var(--token)`) in every browser and follows the
+// page's theme without a re-render. toSVG() resolves them back to attributes.
+const PAINT = new Set(['fill', 'stroke', 'stop-color']);
+
 function svgElement<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<string, string | number> = {}): SVGElementTagNameMap[K] {
   const node = document.createElementNS(NS, tag);
-  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+  for (const [key, value] of Object.entries(attributes)) {
+    if (PAINT.has(key)) node.style.setProperty(key, String(value));
+    else node.setAttribute(key, String(value));
+  }
   return node;
+}
+
+function themeColors(options: Options): ChartColors {
+  const overrides = Object.entries(options.colors ?? {}).filter(([, value]) => value !== undefined);
+  return { ...colors[options.theme ?? 'light'], ...Object.fromEntries(overrides) };
 }
 
 function svgText(text: string, x: number, y: number, attributes: Record<string, string | number> = {}): SVGTextElement {
@@ -43,6 +56,7 @@ function withDefaults(input: Options, isLine: boolean): Options {
     grid: input.grid ?? true,
     labels: input.labels ?? true,
     values: input.values ?? false,
+    missing: input.missing ?? 'placeholder',
     animate: input.animate ?? true,
     radius: input.radius ?? 5,
     label: input.label ?? (isLine ? 'Line chart' : 'Bar chart'),
@@ -57,6 +71,10 @@ function validateChart(options: Options, isLine: boolean): void {
   validate(options);
   if (options.tooltip !== undefined && typeof options.tooltip !== 'boolean' && typeof options.tooltip !== 'function') {
     throw new TypeError('Charto: tooltip must be a boolean or a text formatter.');
+  }
+  if (options.colors !== undefined && (typeof options.colors !== 'object' || options.colors === null
+    || Object.values(options.colors).some(value => value !== undefined && typeof value !== 'string'))) {
+    throw new TypeError('Charto: colors must be an object of CSS colour strings.');
   }
   if (options.onClick !== undefined && typeof options.onClick !== 'function') {
     throw new TypeError('Charto: onClick must be a function.');
@@ -96,6 +114,17 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
   host.append(wrapper);
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
+  /** A colour as the page resolves it, so `var(--token)` survives an export. */
+  function resolveColor(value: string): string {
+    if (!value.includes('var(')) return value;
+    const probe = document.createElement('span');
+    probe.style.color = value;
+    wrapper.append(probe);
+    const resolved = getComputedStyle(probe).color;
+    probe.remove();
+    return resolved || value;
+  }
+
   function stopAnimations(): void { animations.forEach(animation => animation.cancel()); animations = []; }
   function hideTooltip(): void { tooltip.hidden = true; }
 
@@ -107,7 +136,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
     const width = Math.max(mini ? 32 : 160, host!.getBoundingClientRect().width || renderedWidth || 640);
     renderedWidth = width;
     const height = options.height!;
-    const theme = colors[options.theme ?? 'light'];
+    const theme = themeColors(options);
     const horizontal = !isLine && options.orientation === 'horizontal';
     const stacked = !isLine && options.mode === 'stacked';
     const count = options.data.length;
@@ -135,7 +164,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
       role: 'group', 'aria-label': options.label!, 'font-family': 'ui-sans-serif, system-ui, -apple-system, sans-serif',
       fill: theme.text,
     });
-    nextSvg.style.cssText = 'display:block;overflow:visible;max-width:100%';
+    nextSvg.style.cssText += ';display:block;overflow:visible;max-width:100%';
     const title = svgElement('title');
     title.textContent = options.label!;
     nextSvg.append(title);
@@ -144,23 +173,26 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
     tooltip.style.background = theme.tooltip;
     tooltip.style.color = theme.tooltipText;
     const marks: SVGGraphicsElement[] = [];
-    const attachInteraction = (mark: SVGGraphicsElement, dataIndex: number, seriesIndex: number, name: string, value: number): void => {
+    const attachInteraction = (mark: SVGGraphicsElement, dataIndex: number, seriesIndex: number, name: string, value: number | null): void => {
       const datum = options.data[dataIndex];
       const label = datum.label;
-      const onClick = options.onClick;
+      // A missing-value placeholder says "nothing here yet": it has a tooltip and a
+      // place in the keyboard order, but nothing to open.
+      const onClick = value === null ? undefined : options.onClick;
       const point = { datum, label, value, dataIndex, seriesIndex, seriesName: name || 'Value' };
+      const shown = value === null ? 'No value' : formatFull(value);
       mark.setAttribute('tabindex', marks.length === 0 ? '0' : '-1');
       mark.setAttribute('role', onClick ? 'button' : 'img');
-      mark.setAttribute('aria-label', `${label}${name ? ` · ${name}` : ''}: ${formatFull(value)}`);
+      mark.setAttribute('aria-label', `${label}${name ? ` · ${name}` : ''}: ${shown}`);
       mark.style.cursor = onClick ? 'pointer' : 'default';
       const activate = (nativeEvent: MouseEvent | KeyboardEvent): void => {
-        if (destroyed || svg !== nextSvg) return;
-        onClick?.({ ...point, nativeEvent });
+        if (destroyed || svg !== nextSvg || value === null) return;
+        onClick?.({ ...point, value, nativeEvent });
       };
       if (onClick) mark.addEventListener('click', activate);
       const showTooltip = (event?: PointerEvent): void => {
         if (options.tooltip === false) return;
-        const content = typeof options.tooltip === 'function' ? options.tooltip(point) : `${label}${name ? ` · ${name}` : ''}\n${formatFull(value)}`;
+        const content = typeof options.tooltip === 'function' ? options.tooltip(point) : `${label}${name ? ` · ${name}` : ''}\n${shown}`;
         if (!content) { hideTooltip(); return; }
         tooltip.textContent = content;
         tooltip.hidden = false;
@@ -238,7 +270,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
           let run: Point[] = [];
           options.data.forEach((datum, index) => {
             const value = valuesOf(datum)[seriesIndex];
-            if (value === undefined) {
+            if (value === undefined || value === null) {
               if (run.length) runs.push(run);
               run = [];
               return;
@@ -253,7 +285,7 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
               'data-charto-dot': '',
             }) : undefined;
             const hit = svgElement('circle', { cx: x, cy: y, r: 10, fill: 'transparent', 'data-charto-point': '', 'data-charto-hit': '' });
-            hit.style.cssText = 'cursor:default;outline:none';
+            hit.style.cssText += ';cursor:default;outline:none';
             attachInteraction(hit, index, seriesIndex, name, value);
             if (dot) {
               const emphasize = (): void => { dot.setAttribute('r', '5'); };
@@ -308,6 +340,39 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
         const gap = stacked ? 0 : Math.min(4, groupSize * 0.08);
         const barSize = stacked ? groupSize : Math.max(0.2, (groupSize - gap * (seriesCount - 1)) / seriesCount);
         const labelStep = Math.max(1, Math.ceil((horizontal ? 24 : 44) / band));
+        const seriesColor = (datum: { color?: string }, seriesIndex: number): string => datum.color ?? options.series?.[seriesIndex]?.color ?? (seriesIndex === 0 ? options.color : undefined) ?? palette[seriesIndex % palette.length];
+        const seriesName = (seriesIndex: number): string => options.series?.[seriesIndex]?.name ?? (seriesCount > 1 ? `Series ${seriesIndex + 1}` : '');
+        // One stripe pattern per colour, shared by every hatched bar that wears it.
+        const hatches = new Map<string, string>();
+        const hatch = (color: string): string => {
+          let id = hatches.get(color);
+          if (!id) {
+            id = `${chartId}-hatch-${hatches.size}`;
+            const pattern = svgElement('pattern', { id, patternUnits: 'userSpaceOnUse', width: 6, height: 6, patternTransform: 'rotate(45)' });
+            pattern.append(svgElement('rect', { width: 2, height: 6, fill: color }));
+            definitions.append(pattern);
+            hatches.set(color, id);
+          }
+          return `url(#${id})`;
+        };
+        // A missing value is a short dashed stub off the baseline, toward the side
+        // the scale has room on: never an empty slot that reads as zero.
+        const placeholder = (dataIndex: number, seriesIndex: number, offset: number, size: number): void => {
+          const stub = Math.min(12, (horizontal ? plotWidth : plotHeight) / 4);
+          const end = horizontal ? left + plotWidth : top;
+          const forward = horizontal ? baseline + stub <= end : baseline - stub >= end;
+          const from = horizontal ? (forward ? baseline : baseline - stub) : (forward ? baseline - stub : baseline);
+          const rect = svgElement('rect', {
+            x: (horizontal ? from : offset) + 0.5, y: (horizontal ? offset : from) + 0.5,
+            width: Math.max(0.5, (horizontal ? stub : size) - 1), height: Math.max(0.5, (horizontal ? size : stub) - 1),
+            rx: Math.min(options.radius!, size / 2, stub / 2), fill: 'transparent',
+            stroke: seriesColor(options.data[dataIndex], seriesIndex), 'stroke-width': 1, 'stroke-dasharray': '3 3',
+            'data-charto-missing': '',
+          });
+          rect.style.cssText += ';outline:none';
+          attachInteraction(rect, dataIndex, seriesIndex, seriesName(seriesIndex), null);
+          nextSvg.append(rect);
+        };
         options.data.forEach((datum, index) => {
           const center = (horizontal ? top : left) + band * (index + 0.5);
           if (!mini && options.labels && index % labelStep === 0) nextSvg.append(horizontal
@@ -342,27 +407,40 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
               ], { duration: 720, delay: Math.min(index * 35, 350), easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' }));
             }
           }
+          const present = datumValues.filter((value): value is number => value !== null);
+          if (stacked && present.length === 0 && datumValues.length > 0 && options.missing === 'placeholder') {
+            placeholder(index, 0, center - groupSize / 2, barSize);
+          }
           datumValues.forEach((value, seriesIndex) => {
+            if (value === null) {
+              if (!stacked && options.missing === 'placeholder') placeholder(index, seriesIndex, center - groupSize / 2 + seriesIndex * (barSize + gap), barSize);
+              return;
+            }
             const segment = positions[seriesIndex];
             if (Math.max(segment.start, segment.end) < domain.min || Math.min(segment.start, segment.end) > domain.max) return;
             const start = scale(clamp(segment.start));
             const end = scale(clamp(segment.end));
             if (start === end && value !== 0) return;
             const offset = center - groupSize / 2 + (stacked ? 0 : seriesIndex * (barSize + gap));
-            const color = datum.color ?? options.series?.[seriesIndex]?.color ?? (seriesIndex === 0 ? options.color : undefined) ?? palette[seriesIndex % palette.length];
+            const color = seriesColor(datum, seriesIndex);
             const x = horizontal ? Math.min(start, end) : offset;
             const y = horizontal ? offset : Math.min(start, end);
             const barWidth = horizontal ? Math.abs(end - start) : barSize;
             const barHeight = horizontal ? barSize : Math.abs(end - start);
-            const name = options.series?.[seriesIndex]?.name ?? (seriesCount > 1 ? `Series ${seriesIndex + 1}` : '');
+            const name = seriesName(seriesIndex);
             const description = `${datum.label}${name ? ` · ${name}` : ''}: ${formatFull(value)}`;
+            const hatched = options.series?.[seriesIndex]?.pattern === 'hatched';
+            // A hatched bar is stripes inside a 1px outline; the outline sits inside the
+            // bar's own bounds, so neighbours and the stack's clip keep their geometry.
+            const inset = hatched && barWidth > 1 && barHeight > 1 ? 0.5 : 0;
             const rect = svgElement('rect', {
-              x, y, width: Math.max(0.5, barWidth), height: Math.max(0.5, barHeight),
-              rx: stacked ? 0 : Math.min(options.radius!, barWidth / 2, barHeight / 2), fill: color,
+              x: x + inset, y: y + inset, width: Math.max(0.5, barWidth - inset * 2), height: Math.max(0.5, barHeight - inset * 2),
+              rx: stacked ? 0 : Math.min(options.radius!, barWidth / 2, barHeight / 2), fill: hatched ? hatch(color) : color,
+              ...(hatched ? { stroke: color, 'stroke-width': 1 } : {}),
               tabindex: marks.length === 0 ? 0 : -1, role: 'img', 'aria-label': description,
               'data-charto-bar': '',
             });
-            rect.style.cssText = `cursor:default;outline:none;transform-origin:${horizontal ? baseline : x}px ${horizontal ? y : baseline}px`;
+            rect.style.cssText += `;cursor:default;outline:none;transform-origin:${horizontal ? baseline : x}px ${horizontal ? y : baseline}px`;
             attachInteraction(rect, index, seriesIndex, name, value);
             (stack ?? nextSvg).append(rect);
             if (!stacked && animate && options.animate && !motion.matches && typeof rect.animate === 'function') {
@@ -375,6 +453,18 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
               ? svgText(formatTick(value), end + (value >= 0 ? 8 : -8), y + barHeight / 2 + 4, { 'text-anchor': value >= 0 ? 'start' : 'end', fill: theme.strong, 'font-size': 10 })
               : svgText(formatTick(value), x + barWidth / 2, end + (value >= 0 ? -8 : 15), { 'text-anchor': 'middle', fill: theme.strong, 'font-size': 10 }));
           });
+          // A stack's value label is its total, at the end of each side it reaches.
+          if (!mini && options.values && stacked && present.length > 0) {
+            const up = present.filter(value => value > 0).reduce((sum, value) => sum + value, 0);
+            const down = present.filter(value => value < 0).reduce((sum, value) => sum + value, 0);
+            for (const total of up === 0 && down === 0 ? [0] : [up, down].filter(value => value !== 0)) {
+              if (total < domain.min || total > domain.max) continue;
+              const end = scale(total);
+              nextSvg.append(horizontal
+                ? svgText(formatTick(total), end + (total >= 0 ? 8 : -8), center + 4, { 'text-anchor': total >= 0 ? 'start' : 'end', fill: theme.strong, 'font-size': 10, 'data-charto-total': '' })
+                : svgText(formatTick(total), center, end + (total >= 0 ? -8 : 15), { 'text-anchor': 'middle', fill: theme.strong, 'font-size': 10, 'data-charto-total': '' }));
+            }
+          }
         });
       }
     }
@@ -392,7 +482,10 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
       const row = body.insertRow();
       const heading = document.createElement('th'); heading.scope = 'row'; heading.textContent = datum.label; row.append(heading);
       const values = valuesOf(datum);
-      for (let i = 0; i < seriesCount; i++) row.insertCell().textContent = isLine && values[i] === undefined ? '—' : formatFull(values[i] ?? 0);
+      for (let i = 0; i < seriesCount; i++) {
+        const value = values[i];
+        row.insertCell().textContent = value === null || (isLine && value === undefined) ? '—' : formatFull(value ?? 0);
+      }
     });
   }
 
@@ -420,16 +513,28 @@ function createChart(target: string | HTMLElement, initial: Options, isLine: boo
     toSVG() {
       if (destroyed) throw new Error('Charto: this chart has been destroyed.');
       const clone = svg.cloneNode(true) as SVGSVGElement;
+      // Back to presentation attributes, with every CSS variable resolved: a saved
+      // file has no stylesheet to look one up in.
+      for (const node of [clone, ...clone.querySelectorAll<SVGElement>('*')]) {
+        for (const property of PAINT) {
+          const value = node.style.getPropertyValue(property);
+          if (!value) continue;
+          node.setAttribute(property, resolveColor(value));
+          node.style.removeProperty(property);
+        }
+        if (!node.style.length) node.removeAttribute('style');
+      }
       clone.setAttribute('width', String(renderedWidth));
       clone.setAttribute('role', 'img');
       clone.querySelectorAll('[data-charto-hit]').forEach(node => node.remove());
       clone.querySelectorAll('[data-charto-dot]').forEach(node => node.setAttribute('r', '3.5'));
-      clone.querySelectorAll('[data-charto-bar], [data-charto-stack]').forEach(node => {
+      clone.querySelectorAll('[data-charto-bar], [data-charto-stack], [data-charto-missing]').forEach(node => {
         node.removeAttribute('tabindex');
         node.removeAttribute('style');
         if (node.getAttribute('role') === 'button') node.setAttribute('role', 'img');
       });
-      const background = svgElement('rect', { width: '100%', height: '100%', fill: colors[options.theme ?? 'light'].background });
+      const background = svgElement('rect', { width: '100%', height: '100%' });
+      background.setAttribute('fill', resolveColor(themeColors(options).background));
       clone.prepend(background);
       return new XMLSerializer().serializeToString(clone);
     },

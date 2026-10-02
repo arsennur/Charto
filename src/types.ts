@@ -1,21 +1,44 @@
+/** A value, or `null` for one that does not exist yet (not the same as zero). */
+export type DatumValue = number | null;
+
 export interface BarDatum {
   label: string;
-  /** Use an array for grouped or stacked series. Missing series are zero. */
-  value: number | number[];
+  /**
+   * Use an array for grouped or stacked series. Missing series are zero.
+   * `null` is "no value": a bar chart draws a dashed placeholder, a line chart a gap.
+   */
+  value: DatumValue | DatumValue[];
   color?: string;
 }
 
 export interface BarSeries {
   name: string;
+  /** Any CSS colour, including `var(--token)`. */
   color?: string;
+  /** `'hatched'` draws diagonal stripes with an outline, e.g. for a projection. */
+  pattern?: 'solid' | 'hatched';
+}
+
+/** Chart chrome colours. Any CSS colour works, including `var(--token)`. */
+export interface ChartColors {
+  /** Axis and category labels. */
+  text: string;
+  /** Value labels. */
+  strong: string;
+  /** Grid lines and the zero line. */
+  grid: string;
+  /** Line point fill and the exported SVG's background. */
+  background: string;
+  tooltip: string;
+  tooltipText: string;
 }
 
 export interface ChartPoint {
   /** The original data item supplied to the chart. */
   datum: BarDatum;
   label: string;
-  /** Raw value of the clicked bar, stack segment, or line point. */
-  value: number;
+  /** Raw value of the bar, stack segment, or line point; `null` for a missing-value placeholder. */
+  value: number | null;
   /** Zero-based index in data. */
   dataIndex: number;
   /** Zero-based index within the datum's value array; 0 for a single value. */
@@ -24,7 +47,9 @@ export interface ChartPoint {
   seriesName: string;
 }
 
-export interface ChartClickEvent extends ChartPoint {
+/** Placeholders are never clickable, so a click always carries a number. */
+export interface ChartClickEvent extends Omit<ChartPoint, 'value'> {
+  value: number;
   nativeEvent: MouseEvent | KeyboardEvent;
 }
 
@@ -43,9 +68,14 @@ export interface BarChartOptions {
   orientation?: 'vertical' | 'horizontal';
   mode?: 'grouped' | 'stacked';
   theme?: 'light' | 'dark';
+  /** Override the theme's chrome colours, e.g. with your own CSS variables. */
+  colors?: Partial<ChartColors>;
   grid?: boolean;
   labels?: boolean;
+  /** Value labels at the bar ends; on a stack, its total. */
   values?: boolean;
+  /** How a `null` value is drawn: a dashed stub (default) or nothing. */
+  missing?: 'placeholder' | 'none';
   animate?: boolean;
   /** Corner radius in pixels. Stacks round only the outside corners. */
   radius?: number;
@@ -67,9 +97,10 @@ export interface Chart<Options> {
 export interface BarChart extends Chart<BarChartOptions> {}
 
 export type LineDatum = BarDatum;
-export type LineSeries = BarSeries;
+export type LineSeries = Omit<BarSeries, 'pattern'>;
 
-export interface LineChartOptions extends Omit<BarChartOptions, 'orientation' | 'mode' | 'radius'> {
+export interface LineChartOptions extends Omit<BarChartOptions, 'orientation' | 'mode' | 'radius' | 'missing' | 'series'> {
+  series?: LineSeries[];
   /** Straight segments with sharp joins, or smooth curves through the same points. */
   curve?: 'linear' | 'smooth';
   /** Line thickness in pixels. */

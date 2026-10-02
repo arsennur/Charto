@@ -38,7 +38,7 @@ Paket önceden derlenmiş JavaScript ve TypeScript bildirimleriyle gelir; çalı
 Yayımlanmamış bir sürümü veya belirli bir etiketi denemek için:
 
 ```sh
-npm install 'git+https://github.com/arsennur/Charto.git#v0.2.0'
+npm install 'git+https://github.com/arsennur/Charto.git#v0.3.0'
 ```
 
 Git kurulumunda `prepare` script'i kütüphaneyi derler. Kurulum sırasında geliştirme araçları indirilir; Node.js 22.18+ kullanın.
@@ -67,7 +67,7 @@ Build aracı olmayan sayfalarda, `dist/charto.js` dosyasını projenize kopyalay
 
 Demo sitesi ayrı bir uygulamadır. İsterseniz `demo-dist/` klasörünü statik hosting'e koyabilirsiniz; kütüphaneyi kullanmak için demoyu yayınlamak gerekmez.
 
-`npm version` sürümü ve Git etiketini oluşturur. `npm publish` yayımlamadan önce `prepublishOnly` ile tip kontrolünü ve testleri, `prepare` ile kütüphane derlemesini çalıştırır. Örneğin `0.2.0` sonrasında:
+`npm version` sürümü ve Git etiketini oluşturur. `npm publish` yayımlamadan önce `prepublishOnly` ile tip kontrolünü ve testleri, `prepare` ile kütüphane derlemesini çalıştırır. Örneğin `0.3.0` sonrasında:
 
 ```sh
 npm version patch
@@ -111,21 +111,22 @@ chart.update({ points: false });
 - `fill: true` çizgi ile sıfır arasını aşağı doğru şeffaflaşan bir gradyanla doldurur. Varsayılanı `false` değerindedir; iki çizgi stilinde de çalışır. Sıfır sabit ölçeğin dışındaysa en yakın ölçek sınırına kadar dolar. Eksik verilerin arası doldurulmaz.
 - `points` varsayılan `true` değerindedir. `false` noktaları gizler; tooltip, klavye gezinmesi ve veri tablosu çalışmaya devam eder. Hem keskin hem kıvrımlı çizgilerde kullanılabilir.
 - Açılışta çizgi soldan sağa çizilir. `animate: false` ve sistemin hareketi azaltma tercihi desteklenir.
-- `data`, `series`, `color`, `height`, `theme`, `grid`, `labels`, `values`, `label` ve `formatValue` iki chart türünde de kullanılabilir.
-- `orientation`, `mode` ve `radius` yalnızca bar chart seçenekleridir.
-- Çoklu çizgiler için `value: [120, 80]` ve `series` kullanın. Eksik bir seri değeri veya `value: []` çizgide boşluk bırakır; tablo bu değeri `—` ile gösterir.
+- `data`, `series`, `color`, `height`, `theme`, `colors`, `grid`, `labels`, `values`, `label` ve `formatValue` iki chart türünde de kullanılabilir.
+- `orientation`, `mode`, `radius`, `missing` ve seri `pattern`'i yalnızca bar chart seçenekleridir.
+- Çoklu çizgiler için `value: [120, 80]` ve `series` kullanın. `null`, eksik bir seri değeri veya `value: []` çizgide boşluk bırakır; tablo bu değeri `—` ile gösterir.
 - Kategoriler veri sırasıyla, eşit aralıklarla yerleştirilir. `datum.color` yalnızca ilgili noktanın rengini değiştirir; çizginin rengi `series` veya `color` ile belirlenir.
 
 ### Bar chart seçenekleri
 
 | Seçenek | Varsayılan | Açıklama |
 | --- | --- | --- |
-| `data` | Gerekli | `{ label: string, value: number \| number[], color?: string }[]` |
-| `series` | Otomatik adlar | `{ name: string, color?: string }[]` |
+| `data` | Gerekli | `{ label: string, value: number \| null \| (number \| null)[], color?: string }[]` |
+| `series` | Otomatik adlar | `{ name: string, color?: string, pattern?: 'solid' \| 'hatched' }[]` |
 | `orientation` | `'vertical'` | `'vertical'` veya `'horizontal'` |
 | `mode` | `'grouped'` | `'grouped'` veya `'stacked'` |
 | `color` | Vivid green | Birinci serinin rengi |
 | `theme` | `'light'` | `'light'` veya `'dark'` |
+| `colors` | Temanın renkleri | `{ text, strong, grid, background, tooltip, tooltipText }` içinden değiştirmek istedikleriniz; CSS değişkeni olabilir |
 | `height` | `320` | Piksel cinsinden yükseklik; en az 120. Compact modda varsayılan 80, minimum 32 |
 | `compact` | `false` | Eksen, grid, kategori ve değer etiketlerini gizleyen mini grafik modu |
 | `min` / `max` | Otomatik | Değer ölçeğinin tam alt/üst sınırları |
@@ -134,7 +135,8 @@ chart.update({ points: false });
 | `animate` | `true` | Kademeli açılış animasyonu |
 | `grid` | `true` | Yardımcı çizgiler; compact modda gizlenir |
 | `labels` | `true` | Kategori etiketleri |
-| `values` | `false` | Bar uçlarında değerler |
+| `values` | `false` | Bar uçlarında değerler; yığılmış barlarda yığının toplamı |
+| `missing` | `'placeholder'` | `null` değerin görünümü: kesikli kısa bar veya `'none'` ile hiçbir şey |
 | `label` | `'Bar chart'` | Erişilebilir chart adı |
 | `formatValue` | Otomatik | `(value: number) => string`; eksen, tooltip ve tablo biçimi |
 | `onClick` | Yok | `(event: ChartClickEvent) => void`; tıklanan bar, segment veya nokta |
@@ -232,7 +234,55 @@ barChart('#chart', {
 });
 ```
 
-Negatif değerler sıfırın diğer tarafına çizilir. Yığılmış serilerde pozitif ve negatif toplamlar ayrı tutulur. Eksik seri değerleri tabloda sıfır kabul edilir. Yığılmış barlarda `radius` tüm barın en üst ve en alt dış köşelerini yuvarlatır; yatay barlarda sol ve sağ uçlara uygulanır. Segmentlerin birleşim yerleri düz kalır. Keskin köşeler için `radius: 0` kullanın. `values` bu modda uygulanmaz; her segmentin değeri tooltip ve erişilebilir tabloda bulunur.
+Negatif değerler sıfırın diğer tarafına çizilir. Yığılmış serilerde pozitif ve negatif toplamlar ayrı tutulur. Eksik seri değerleri tabloda sıfır kabul edilir. Yığılmış barlarda `radius` tüm barın en üst ve en alt dış köşelerini yuvarlatır; yatay barlarda sol ve sağ uçlara uygulanır. Segmentlerin birleşim yerleri düz kalır. Keskin köşeler için `radius: 0` kullanın. Bu modda `values` her yığının toplamını yığının ucuna yazar (pozitif ve negatif taraflar ayrı); tek tek segmentlerin değeri tooltip ve erişilebilir tabloda bulunur.
+
+### Taralı seri
+
+Bir seriyi düz renk yerine çizgili bir dolgu ve ince bir çerçeveyle çizmek için `pattern: 'hatched'` kullanın. Tahmin, plan veya henüz kesinleşmemiş bir değer için uygundur ve yığılmış barlarda da çalışır:
+
+```ts
+barChart('#chart', {
+  data: [{ label: 'Eylül', value: [32, 0] }, { label: 'Ekim', value: [18, 14] }],
+  series: [
+    { name: 'Gerçekleşen', color: '#10b981' },
+    { name: 'Ay sonu tahmini', color: '#10b981', pattern: 'hatched' },
+  ],
+  mode: 'stacked',
+});
+```
+
+Çerçeve barın kendi sınırlarının içinde kalır; komşu segmentlerin ve yığının geometrisi değişmez. SVG export'u deseni korur.
+
+### Eksik değer: `null`
+
+`null`, sıfır değil "henüz bir değer yok" demektir (örneğin henüz hesaplanamayan bir oran). Bar chart bu yere taban çizgisinden kısa, kesikli bir çubuk çizer; sıfır gibi okunan boş bir yer bırakmaz. Line chart'ta `null` çizgide boşluktur.
+
+```ts
+barChart('#chart', {
+  data: [{ label: 'Ağustos', value: 12.4 }, { label: 'Eylül', value: null }],
+  formatValue: value => `${value}%`,
+  tooltip: ({ label, value }) => value === null ? `${label} · henüz değerlendirilmedi` : `${label} · ${value}%`,
+});
+```
+
+- Kesikli çubuğun tooltip'i ve klavye sırasında yeri vardır; tıklanamaz, `onClick` onun için çağrılmaz. Varsayılan tooltip ve ekran okuyucu etiketi "No value" der; tabloda `—` görünür.
+- Tooltip fonksiyonu bu noktada `value: null` alır. `ChartClickEvent.value` her zaman sayıdır.
+- Yığılmış barlarda kesikli çubuk yalnızca yığındaki bütün değerler `null` olduğunda çizilir; tek bir `null` segment yer kaplamaz.
+- Hiçbir şey çizmemek için `missing: 'none'` kullanın.
+
+### Renkler ve CSS değişkenleri
+
+`colors` temanın eksen yazısı, değer etiketi, grid, arka plan ve tooltip renklerini değiştirir; vermediğiniz anahtarlar `theme`'den gelir. Seri renkleri (`color`, `series[].color`, `datum.color`) dahil her renk `var(--token)` olabilir:
+
+```ts
+barChart('#chart', {
+  data,
+  color: 'var(--chart-primary)',
+  colors: { text: 'var(--text-muted)', grid: 'var(--border-subtle)', background: 'var(--surface-card)' },
+});
+```
+
+Renkler SVG'ye satır içi stil olarak yazılır, bu yüzden değişkenler her tarayıcıda çalışır ve sayfanın teması değiştiğinde (örneğin `[data-theme="dark"]` altında değişkenler yeniden tanımlandığında) chart yeniden çizilmeden yeni renkleri alır. `toSVG()` değişkenleri o anki değerlerine çözerek dosyaya yazar. Yazı tipi bir sunum özniteliğidir; sayfanızın CSS'i (`.charto svg { font-family: inherit }`) onu değiştirebilir.
 
 ### Sayı biçimi
 
