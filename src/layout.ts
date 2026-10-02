@@ -45,8 +45,12 @@ export function validate(options: BarChartOptions): void {
 export function getDomain(data: BarDatum[], stacked = false, bounds: { min?: number; max?: number } = {}): { min: number; max: number; ticks: number[] } {
   let low = 0;
   let high = 0;
+  // Whole-number data (counts) never gets a fractional tick: a "0.5" on an axis
+  // of people or orders names a value that cannot exist.
+  let whole = true;
   for (const datum of data) {
     const values = present(valuesOf(datum));
+    if (!values.every(Number.isInteger)) whole = false;
     if (stacked) {
       low = Math.min(low, values.reduce((sum, value) => sum + Math.min(0, value), 0));
       high = Math.max(high, values.reduce((sum, value) => sum + Math.max(0, value), 0));
@@ -63,7 +67,8 @@ export function getDomain(data: BarDatum[], stacked = false, bounds: { min?: num
   const rough = Math.max(Number.MIN_VALUE, (high - low) / 4);
   const power = Math.max(Number.MIN_VALUE, 10 ** Math.floor(Math.log10(rough)));
   const fraction = rough / power;
-  const step = (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 2.5 ? 2.5 : fraction <= 5 ? 5 : 10) * power;
+  const nice = (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 2.5 ? 2.5 : fraction <= 5 ? 5 : 10) * power;
+  const step = whole && !Number.isInteger(nice) ? (nice < 1 ? 1 : Math.floor(nice)) : nice;
   const min = bounds.min ?? Number((Math.floor(low / step) * step).toPrecision(15));
   const max = bounds.max ?? Number((Math.ceil(high / step) * step).toPrecision(15));
   const start = Math.ceil(min / step) * step;

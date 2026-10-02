@@ -104,3 +104,13 @@ test('missing and pattern options are validated', () => {
   assert.throws(() => validate({ data: [], missing: 'skip' as 'none' }), /missing/);
   assert.throws(() => validate({ data: [], series: [{ name: 'P', pattern: 'dots' as 'hatched' }] }), /pattern/);
 });
+test('whole-number data gets whole-number ticks', () => {
+  for (const top of [1, 2, 3, 7, 25, 60]) {
+    const domain = getDomain([{ label: 'A', value: top }, { label: 'B', value: 0 }]);
+    assert.ok(domain.ticks.every(Number.isInteger), `fractional tick for max ${top}: ${domain.ticks}`);
+    assert.ok(domain.max >= top);
+  }
+  assert.deepEqual(getDomain([{ label: 'A', value: 0 }]).ticks, [0, 1]);
+  assert.ok(getDomain([{ label: 'A', value: [1, null, 2] }], true).ticks.every(Number.isInteger));
+  assert.ok(!getDomain([{ label: 'A', value: 0.3 }]).ticks.every(Number.isInteger), 'decimal data lost its fine ticks');
+});
