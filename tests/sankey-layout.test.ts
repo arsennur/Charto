@@ -143,7 +143,8 @@ test('a link that skips columns passes below every node of the columns it crosse
 test('drop-offs into the last column gather into one stream along the foot of the chart', () => {
   const layout = funnel();
   for (let column = 1; column < layout.columns - 1; column++) {
-    const passages = layout.links.filter(link => link?.passes.includes(column)).map(link => ({ link: link!, stop: link!.stops[link!.passes.indexOf(column) + 1] }))
+    const passages = layout.links.filter(link => link?.passes.includes(column) && layout.nodes[link.target!].column === layout.columns - 1)
+      .map(link => ({ link: link!, stop: link!.stops[link!.passes.indexOf(column) + 1] }))
       .sort((a, b) => a.stop.y - b.stop.y);
     if (!passages.length) continue;
     close(passages.at(-1)!.stop.y + passages.at(-1)!.link.thickness, plotBottom, `column ${column}'s stream is not at the foot`);
@@ -156,6 +157,41 @@ test('drop-offs into the last column gather into one stream along the foot of th
   const lost = layout.nodes[7];
   const sources = lost.incoming.map(index => layout.links[index]!.source!);
   assert.deepEqual(sources.map(index => funnelNodes[index].id), ['interested', 'follow', 'sent', 'quote', 'photos']);
+});
+
+test('a skip to a middle column passes right under the nodes it crosses; one to the last column at the foot', () => {
+  const layout = funnel();
+  const photos = layout.nodes[1];
+  const skip = layout.links[1]!; // Intake → Waiting for Quote, under Need Photos
+  const drop = layout.links[2]!; // Intake → Early exit, at the foot of every column it crosses
+  assert.deepEqual(skip.passes, [1]);
+  close(skip.stops[1].y, photos.y + photos.height + layout.gap, 'the skip does not hang right under Need Photos');
+  const atFoot = drop.stops[1 + drop.passes.indexOf(1)];
+  close(atFoot.y + drop.thickness, plotBottom, 'the drop is not at the foot');
+  assert.ok(skip.stops[1].y + skip.thickness <= atFoot.y + 1e-6, 'the skip and the drop overlap in Need Photos\' column');
+  // The skip rises straight from its passage to its target: no lower than where it passed.
+  assert.ok(skip.stops[2].y <= skip.stops[1].y + 1e-6, 'the skip dives before it reaches Waiting for Quote');
+});
+
+test('in a full column the two stacks of passages touch and never overlap', () => {
+  // Column 1 holds b, a skip to c (column 2) and a drop to z (the last column): the fullest column.
+  const layout = sankeyLayout(nodes('a', 'b', 'c', 'z'), [
+    { from: 'a', to: 'b', value: 30 }, { from: 'a', to: 'c', value: 50 }, { from: 'a', to: 'z', value: 70 },
+    { from: 'b', to: 'c', value: 30 }, { from: 'c', to: 'z', value: 80 },
+  ], box);
+  const [b] = [layout.nodes[1]];
+  const skip = layout.links[1]!;
+  const drop = layout.links[2]!;
+  const under = skip.stops[1];
+  const foot = drop.stops[1 + drop.passes.indexOf(1)];
+  close(under.y, b.y + b.height + layout.gap);
+  close(foot.y + drop.thickness, plotBottom);
+  close(under.y + skip.thickness, foot.y, 'a full column leaves a gap or an overlap between its stacks');
+  for (const node of layout.nodes.filter(node => node.column === 1)) {
+    for (const [link, stop] of [[skip, under], [drop, foot]] as const) {
+      assert.ok(!overlaps(stop.y, stop.y + link.thickness, node.y, node.y + node.height), 'a passage crosses a node');
+    }
+  }
 });
 
 test('at a node, bands leave in the order of where they go and arrive in the order of where they come from', () => {

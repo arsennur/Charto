@@ -616,11 +616,19 @@ await test('a Sankey draws a bar per node and a band per link, a zero link not a
   assert(paint(tailIn, 'fill') === css('#3982f7') && /fade-in/.test(tailIn.getAttribute('mask') ?? ''), 'a tail in does not wear its target colour or fade in');
   assert(/^url\("?#charto-\d+-hatch-0"?\)$/.test(paint(sankeyBands()[2], 'fill')) && /fade-out/.test(sankeyBands()[2].getAttribute('mask') ?? ''), 'a hatched tail lost its stripes or its fade');
 });
-await test('Sankey labels follow their node, with its total; the last column labels to the left', () => {
-  const instance = createSankey({ formatValue: value => `${value} leads` });
-  const texts = [...fixture.querySelectorAll('[data-charto-labels] text')];
-  assert(texts.map(text => text.textContent).join('|') === 'Intake 100 leads|Need Photos 80 leads|Quote Sent 50 leads|Booked 20 leads|Lost 90 leads', `labels: ${texts.map(text => text.textContent).join('|')}`);
-  assert(texts[0].getAttribute('text-anchor') === 'start' && texts[4].getAttribute('text-anchor') === 'end', 'labels are on the wrong side');
+await test('Sankey labels sit right of their node with its total; the last column clear of every band and never shortened', () => {
+  const leads = (value: number): string => `${value} leads`;
+  let instance = createSankey({ formatValue: leads });
+  const right = (box: DOMRect): number => box.x + box.width;
+  for (const width of [640, 300]) {
+    if (width !== 640) { instance.destroy(); fixture.style.width = `${width}px`; instance = createSankey({ formatValue: leads }); }
+    const texts = [...fixture.querySelectorAll<SVGTextElement>('[data-charto-labels] text')];
+    assert(texts.slice(3).map(text => text.textContent).join('|') === 'Booked 20 leads|Lost 90 leads', `last column labels at ${width}px: ${texts.map(text => text.textContent).join('|')}`);
+    texts.forEach((text, index) => assert(text.getBBox().x >= right(sankeyNodes()[index].getBBox()), `label ${index} is not right of its node`));
+    const bandsEnd = Math.max(...sankeyBands().map(band => right(band.getBBox())));
+    for (const text of texts.slice(3)) assert(text.getBBox().x >= bandsEnd && right(text.getBBox()) <= width, `a last-column label covers a band or leaves the chart at ${width}px`);
+  }
+  assert([...fixture.querySelectorAll('[data-charto-labels] text')].slice(0, 3).every(text => text.textContent!.endsWith(' leads')), 'a label lost its total');
   instance.update({ values: false });
   assert(fixture.querySelector('[data-charto-labels] text')!.textContent === 'Intake', 'values: false kept the total');
   instance.update({ labels: false });

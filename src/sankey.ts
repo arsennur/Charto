@@ -1,19 +1,58 @@
 import type { ChartType } from './frame.ts';
 import { sankeyGraph, sankeyLayout } from './sankey-layout.ts';
 import { NS, exact, hatches, palette, shortNumber, shorten, svgElement, svgText, themeColors, validateChrome } from './svg.ts';
-import type { SankeyChartOptions, SankeyItem, SankeyNode } from './types.js';
+import type { ChartColors, SankeyChartOptions, SankeyItem, SankeyNode } from './types.js';
 
 const BAND = 0.35;
 const BAND_HATCHED = 0.75;
 const FONT = 'ui-sans-serif, system-ui, -apple-system, sans-serif';
 
 let measurer: CanvasRenderingContext2D | null | undefined;
-/** A label's width at 11px, measured where a canvas exists, else estimated. */
+/** Text's width at 11px in the chart's own font, on a canvas where there is one, else estimated. */
 function textWidth(text: string, weight: number): number {
   if (measurer === undefined) measurer = document.createElement('canvas').getContext('2d');
   if (!measurer) return text.length * 6.5;
   measurer.font = `${weight} 11px ${FONT}`;
   return measurer.measureText(text).width;
+}
+
+/** A node's label: its name, then its total in the quieter colour. */
+function nodeLabel(name: string, total: string, theme: ChartColors): SVGTextElement {
+  const text = svgText('', 0, 0, { stroke: theme.background, 'stroke-width': 3, 'stroke-linejoin': 'round', 'paint-order': 'stroke' });
+  const first = svgElement('tspan', { fill: theme.strong, 'font-weight': 500 });
+  first.textContent = name;
+  text.append(first);
+  if (total) {
+    const second = svgElement('tspan', { fill: theme.text });
+    second.textContent = total;
+    text.append(second);
+  }
+  return text;
+}
+
+const estimate = (text: SVGTextElement): number => textWidth(text.childNodes[0].textContent!, 500) + textWidth(text.childNodes[1]?.textContent ?? '', 400);
+
+/** How wide each label is drawn, measured beside the chart so the page's own font counts; estimated where nothing renders. */
+function labelWidths(stage: HTMLElement, texts: SVGTextElement[]): number[] {
+  const probe = svgElement('svg', { 'font-family': FONT, 'aria-hidden': 'true' });
+  probe.style.cssText = 'position:absolute;visibility:hidden;width:0;height:0;overflow:hidden';
+  probe.append(...texts);
+  stage.append(probe);
+  const widths = texts.map(text => (typeof text.getComputedTextLength === 'function' && text.getComputedTextLength()) || estimate(text));
+  probe.remove();
+  return widths;
+}
+
+/** Shorten a label's name, never its total, until the label fits its room. */
+function fit(text: SVGTextElement, drawn: number, room: number): void {
+  if (drawn <= room) return;
+  const name = text.childNodes[0];
+  const label = name.textContent!;
+  const total = textWidth(text.childNodes[1]?.textContent ?? '', 400);
+  const ratio = drawn / Math.max(1, estimate(text));
+  let length = label.length;
+  while (length > 3 && (textWidth(shorten(label, length), 500) + total) * ratio > room) length--;
+  name.textContent = shorten(label, length);
 }
 
 function defaults(input: SankeyChartOptions): SankeyChartOptions {
@@ -73,7 +112,16 @@ export const sankey: ChartType<SankeyChartOptions> = {
     const definitions = svgElement('defs');
     svg.append(title, definitions);
 
-    const layout = sankeyLayout(nodes, links, { width, height, nodeWidth: options.nodeWidth!, nodeGap: options.nodeGap!, top: 8, right: 1, bottom: 8, left: 1 });
+    // Every label sits right of its node. The last column's sit outside the plot, in
+    // room kept for the widest of them, so none covers a band or is shortened.
+    const graph = sankeyGraph(nodes, links);
+    const last = graph.columns - 1;
+    const texts = options.labels && links.some(link => link.value > 0)
+      ? nodes.map((node, index) => nodeLabel(node.label, options.values ? ` ${formatShort(graph.value[index])}` : '', theme))
+      : [];
+    const widths = texts.length ? labelWidths(stage, texts) : [];
+    const reserve = texts.length ? Math.min(width * 0.4, 12 + Math.max(0, ...widths.filter((_, index) => graph.column[index] === last))) : 0;
+    const layout = sankeyLayout(nodes, links, { width, height, nodeWidth: options.nodeWidth!, nodeGap: options.nodeGap!, top: 8, right: 1 + reserve, bottom: 8, left: 1 });
     if (!layout.links.some(Boolean)) {
       svg.append(svgText('No data yet', width / 2, height / 2, { 'text-anchor': 'middle', 'font-size': 13 }));
     } else {
@@ -164,48 +212,16 @@ export const sankey: ChartType<SankeyChartOptions> = {
         for (const index of node.outgoing) attach('link', index);
       }
 
-      // Labels beside their node, on the side with room: right, except in the last
-      // column. A label never runs into the next column; where the two sides share
-      // the last gap and would meet, they share it.
       const labelLayer = svgElement('g', { 'data-charto-labels': '', 'pointer-events': 'none', 'aria-hidden': 'true' });
-      if (options.labels) {
-        const columns = layout.columns;
-        const nodeWidth = layout.nodes[0].width;
-        const room = columns > 1 ? layout.columnX[1] - layout.columnX[0] - nodeWidth - 12 : width - layout.columnX[0] - nodeWidth - 8;
-        const texts = layout.nodes.map(node => {
-          const value = options.values ? ` ${formatShort(node.value)}` : '';
-          const left = columns > 1 && node.column === columns - 1;
-          return { node, value, left, room, need: textWidth(nodes[node.index].label, 500) + textWidth(value, 400) + 2, middle: node.y + Math.max(1, node.height) / 2 };
-        });
-        for (const a of texts) {
-          if (a.left || a.node.column !== columns - 2) continue;
-          for (const b of texts) {
-            if (!b.left || Math.abs(a.middle - b.middle) >= 14 || a.need + b.need <= room - 8) continue;
-            const share = (room - 8) / 2;
-            if (a.need <= share) b.room = Math.min(b.room, room - 8 - a.need);
-            else if (b.need <= share) a.room = Math.min(a.room, room - 8 - b.need);
-            else { a.room = Math.min(a.room, share); b.room = Math.min(b.room, share); }
-          }
-        }
-        for (const { node, value, left, room: fits, middle } of texts) {
-          const text = svgText('', left ? node.x - 6 : node.x + node.width + 6, middle + 4, {
-            'text-anchor': left ? 'end' : 'start', stroke: theme.background, 'stroke-width': 3,
-            'stroke-linejoin': 'round', 'paint-order': 'stroke',
-          });
-          const name = svgElement('tspan', { fill: theme.strong, 'font-weight': 500 });
-          const label = nodes[node.index].label;
-          const room = fits - textWidth(value, 400) - 2;
-          let length = label.length;
-          while (length > 3 && textWidth(shorten(label, length), 500) > room) length--;
-          name.textContent = shorten(label, length);
-          text.append(name);
-          if (value) {
-            const total = svgElement('tspan', { fill: theme.text });
-            total.textContent = value;
-            text.append(total);
-          }
-          labelLayer.append(text);
-        }
+      const step = layout.columns > 1 ? layout.columnX[1] - layout.columnX[0] : 0;
+      for (const node of texts.length ? layout.nodes : []) {
+        const text = texts[node.index];
+        const outside = node.column === last;
+        // A label stops short of the next column; the last column's start past its tails.
+        fit(text, widths[node.index], outside ? reserve - 12 : step - node.width - 12);
+        text.setAttribute('x', String(node.x + node.width + 6 + (outside ? layout.tailRoom.right : 0)));
+        text.setAttribute('y', String(node.y + Math.max(1, node.height) / 2 + 4));
+        labelLayer.append(text);
       }
       svg.append(bandLayer, nodeLayer, labelLayer);
       // Bands are drawn in from the left; nodes and labels fade in.

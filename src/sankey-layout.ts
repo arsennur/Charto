@@ -55,6 +55,8 @@ export interface SankeyLayout {
   gap: number;
   /** How far a tail reaches from its node. */
   tail: number;
+  /** Room kept at each edge for the tails that enter the first column or leave the last. */
+  tailRoom: { left: number; right: number };
   /** Left edge of each column's nodes. */
   columnX: number[];
   nodes: SankeyNodeLayout[];
@@ -182,9 +184,11 @@ export function ribbonPath(stops: BandStop[], thickness: number): string {
  * Place every node and band. Pure: no DOM.
  *
  * Nodes stack from the top of their column in the order given. A link that skips
- * columns runs under the nodes of every column it crosses, in a passage; a column's
- * passages stack up from the foot of the chart, so flows bound for the same far
- * column (a funnel's drop-offs) gather into one stream along the bottom. One scale
+ * columns runs under the nodes of every column it crosses, in a passage. A passage
+ * bound for the last column stacks up from the foot of the chart, so those flows (a
+ * funnel's drop-offs) gather into one stream along the bottom; any other passage
+ * hangs right under the column's nodes, so a skip to a middle column never dives to
+ * the foot and climbs back. One scale
  * serves the whole chart, set by the fullest column.
  */
 export function sankeyLayout(nodes: SankeyNode[], links: SankeyLink[], box: SankeyBox): SankeyLayout {
@@ -198,8 +202,9 @@ export function sankeyLayout(nodes: SankeyNode[], links: SankeyLink[], box: Sank
   // Columns spread evenly across the width; a tail at either edge gets room to fade.
   const tailInAtEdge = links.some((_, index) => drawn(index) && source[index] === null && column[target[index]!] === 0);
   const tailOutAtEdge = links.some((_, index) => drawn(index) && target[index] === null && column[source[index]!] === columns - 1);
-  const left = box.left + (tailInAtEdge ? TAIL : 0);
-  const span = Math.max(1, box.width - box.right - (tailOutAtEdge ? TAIL : 0) - left);
+  const tailRoom = { left: tailInAtEdge ? TAIL : 0, right: tailOutAtEdge ? TAIL : 0 };
+  const left = box.left + tailRoom.left;
+  const span = Math.max(1, box.width - box.right - tailRoom.right - left);
   const nodeWidth = Math.min(box.nodeWidth, span);
   const step = columns > 1 ? (span - nodeWidth) / (columns - 1) : 0;
   const columnX = Array.from({ length: columns }, (_, index) => columns > 1 ? left + index * step : left + (span - nodeWidth) / 2);
@@ -237,19 +242,27 @@ export function sankeyLayout(nodes: SankeyNode[], links: SankeyLink[], box: Sank
   }
 
   // Passages, left to right, so a band's place in the previous column is known.
-  // Bands that leave the stream sooner ride on top of it, so they rise without
-  // crossing the ones that carry on; then by their target's height, then by where
-  // they come from.
+  // A passage bound for the last column joins the stream at the foot; any other
+  // hangs one gap under the column's nodes. The scale fits nodes, gaps and every
+  // passage into the height, so the two stacks can touch but never overlap. In
+  // each stack a band that leaves sooner rides on top, so it rises without crossing
+  // the ones that carry on; then by its target's height, then by where it comes from.
   const passageY: number[][] = links.map(() => []);
   const previousY = (index: number, at: number): number => {
     const from = source[index]!;
     return column[from] === at - 1 ? laid[from].y : passageY[index][at - 1];
   };
+  const toLast = (index: number): boolean => column[target[index]!] === columns - 1;
   passing.forEach((list, at) => {
-    list.sort((a, b) => column[target[a]!] - column[target[b]!] || laid[target[a]!].y - laid[target[b]!].y
-      || previousY(a, at) - previousY(b, at) || a - b);
-    let y = plotBottom - list.reduce((sum, index) => sum + links[index].value * scale, 0);
-    for (const index of list) { passageY[index][at] = y; y += links[index].value * scale; }
+    const order = (a: number, b: number): number => column[target[a]!] - column[target[b]!] || laid[target[a]!].y - laid[target[b]!].y
+      || previousY(a, at) - previousY(b, at) || a - b;
+    const under = list.filter(index => !toLast(index)).sort(order);
+    const foot = list.filter(toLast).sort(order);
+    const lowest = members[at].at(-1);
+    let y = lowest === undefined ? plotTop : laid[lowest].y + laid[lowest].height + gap;
+    for (const index of under) { passageY[index][at] = y; y += links[index].value * scale; }
+    y = plotBottom - foot.reduce((sum, index) => sum + links[index].value * scale, 0);
+    for (const index of foot) { passageY[index][at] = y; y += links[index].value * scale; }
   });
 
   // Slots along each node's edges: ordered by where the band goes next (or came
@@ -302,5 +315,5 @@ export function sankeyLayout(nodes: SankeyNode[], links: SankeyLink[], box: Sank
     return { index, source: from, target: to, value: link.value, thickness, passes: passes[index], stops, path: ribbonPath(stops, thickness) };
   });
 
-  return { columns, scale, gap, tail, columnX, nodes: laid, links: laidLinks };
+  return { columns, scale, gap, tail, tailRoom, columnX, nodes: laid, links: laidLinks };
 }
