@@ -49,3 +49,4 @@
 @media(max-width:800px){.playground-header-actions{gap:10px}.playground-header-actions .live-indicator{display:none}.line-style-note{display:none}.family-switch button{padding:5px 9px;font-size:10px}}
 @media(max-width:650px){.hero h1{font-size:52px}.hero-asterisk{right:-36px;font-size:28px}.line-example .example-meta{flex-wrap:wrap;gap:6px}}
 @media(max-width:370px){.hero h1{font-size:44px}.hero-asterisk{right:-29px;font-size:24px}}
+.flow-example{margin-top:22px}.flow-example .example-meta code{font:9px var(--mono);color:#71717a}#example-sankey{margin-top:16px}

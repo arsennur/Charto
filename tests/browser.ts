@@ -1,10 +1,10 @@
-import { barChart, lineChart, type BarChart, type BarChartOptions, type ChartClickEvent, type LineChart, type LineChartOptions } from '../src/index.ts';
+import { barChart, lineChart, sankeyChart, type BarChart, type BarChartOptions, type ChartClickEvent, type LineChart, type LineChartOptions, type SankeyChart, type SankeyChartOptions, type SankeyClickEvent, type SankeyItem } from '../src/index.ts';
 
 const fixture = document.querySelector<HTMLElement>('#fixture')!;
 const results = document.querySelector('#results')!;
 let passed = 0;
 let failed = 0;
-let chart: BarChart | LineChart | undefined;
+let chart: BarChart | LineChart | SankeyChart | undefined;
 const assert = (condition: unknown, message: string): void => { if (!condition) throw new Error(message); };
 const bars = (): SVGRectElement[] => [...fixture.querySelectorAll<SVGRectElement>('[data-charto-bar]')];
 const create = (patch: Partial<BarChartOptions> = {}): BarChart => {
@@ -15,6 +15,33 @@ const createLine = (patch: Partial<LineChartOptions> = {}): LineChart => {
   chart = lineChart(fixture, { data: [{ label: 'A', value: 20 }, { label: 'B', value: 40 }, { label: 'C', value: 10 }], animate: false, ...patch });
   return chart;
 };
+const flow: SankeyChartOptions = {
+  nodes: [
+    { id: 'in', label: 'Intake', color: '#9066f4' },
+    { id: 'photos', label: 'Need Photos', color: '#3982f7' },
+    { id: 'sent', label: 'Quote Sent', color: '#27bd83' },
+    { id: 'won', label: 'Booked', column: 3, color: '#10b981' },
+    { id: 'lost', label: 'Lost', column: 3, color: '#fa4768' },
+  ],
+  links: [
+    { from: 'in', to: 'photos', value: 60 },
+    { from: 'in', to: 'lost', value: 30 },
+    { from: 'in', value: 10, pattern: 'hatched' },
+    { to: 'photos', value: 20 },
+    { from: 'photos', to: 'sent', value: 50 },
+    { from: 'photos', to: 'lost', value: 30 },
+    { from: 'sent', to: 'won', value: 20 },
+    { from: 'sent', to: 'lost', value: 30 },
+    { from: 'sent', to: 'won', value: 0 },
+  ],
+  animate: false,
+};
+const createSankey = (patch: Partial<SankeyChartOptions> = {}): SankeyChart => {
+  chart = sankeyChart(fixture, { ...flow, ...patch });
+  return chart;
+};
+const sankeyNodes = (): SVGRectElement[] => [...fixture.querySelectorAll<SVGRectElement>('[data-charto-node]')];
+const sankeyBands = (): SVGPathElement[] => [...fixture.querySelectorAll<SVGPathElement>('[data-charto-band]')];
 const paint = (node: Element, property: string): string => (node as SVGElement).style.getPropertyValue(property);
 /** A colour as the browser serialises it (#fa4768 → rgb(250, 71, 104)). */
 const css = (value: string): string => { const probe = document.createElement('span'); probe.style.color = value; return probe.style.color; };
@@ -578,6 +605,157 @@ await test('colors override the theme and accept CSS variables, resolved on expo
   } finally {
     for (const name of ['--chart-text', '--chart-grid', '--chart-bg', '--chart-bar']) fixture.style.removeProperty(name);
   }
+});
+await test('a Sankey draws a bar per node and a band per link, a zero link not at all', () => {
+  createSankey();
+  assert(sankeyNodes().length === 5 && sankeyBands().length === 8, `drew ${sankeyNodes().length} nodes and ${sankeyBands().length} bands`);
+  const [intake, photos] = sankeyNodes();
+  assert(Math.abs(intake.height.baseVal.value - 100 / 80 * photos.height.baseVal.value) < 0.01, 'node heights do not follow their totals');
+  assert(paint(sankeyBands()[0], 'fill') === css('#9066f4') && sankeyBands()[0].getAttribute('fill-opacity') === '0.35', 'a band does not wear its source colour');
+  const tailIn = sankeyBands()[3];
+  assert(paint(tailIn, 'fill') === css('#3982f7') && /fade-in/.test(tailIn.getAttribute('mask') ?? ''), 'a tail in does not wear its target colour or fade in');
+  assert(/^url\("?#charto-\d+-hatch-0"?\)$/.test(paint(sankeyBands()[2], 'fill')) && /fade-out/.test(sankeyBands()[2].getAttribute('mask') ?? ''), 'a hatched tail lost its stripes or its fade');
+});
+await test('Sankey labels follow their node, with its total; the last column labels to the left', () => {
+  const instance = createSankey({ formatValue: value => `${value} leads` });
+  const texts = [...fixture.querySelectorAll('[data-charto-labels] text')];
+  assert(texts.map(text => text.textContent).join('|') === 'Intake 100 leads|Need Photos 80 leads|Quote Sent 50 leads|Booked 20 leads|Lost 90 leads', `labels: ${texts.map(text => text.textContent).join('|')}`);
+  assert(texts[0].getAttribute('text-anchor') === 'start' && texts[4].getAttribute('text-anchor') === 'end', 'labels are on the wrong side');
+  instance.update({ values: false });
+  assert(fixture.querySelector('[data-charto-labels] text')!.textContent === 'Intake', 'values: false kept the total');
+  instance.update({ labels: false });
+  assert(!fixture.querySelector('[data-charto-labels] text'), 'labels: false still drew labels');
+});
+await test('Sankey tooltips name the node, or both ends of a band', () => {
+  const instance = createSankey();
+  const tip = fixture.querySelector<HTMLElement>('[role=tooltip]')!;
+  hover(sankeyNodes()[4]);
+  assert(tip.textContent === 'Lost\n90', `node tooltip: ${tip.textContent}`);
+  hover(sankeyBands()[1]);
+  assert(tip.textContent === 'Intake → Lost\n30', `band tooltip: ${tip.textContent}`);
+  hover(sankeyBands()[2]);
+  assert(tip.textContent === 'Intake → …\n10', `tail out tooltip: ${tip.textContent}`);
+  hover(sankeyBands()[3]);
+  assert(tip.textContent === '… → Need Photos\n20', `tail in tooltip: ${tip.textContent}`);
+  const seen: SankeyItem[] = [];
+  instance.update({ tooltip: item => { seen.push(item); return item.kind === 'node' ? `<b>${item.node.label}</b>` : ''; } });
+  hover(sankeyNodes()[0]);
+  assert(tip.textContent === '<b>Intake</b>' && !tip.querySelector('b'), 'custom tooltip interpreted HTML');
+  hover(sankeyBands()[0]);
+  assert(tip.hidden && seen.at(-1)?.kind === 'link', 'an empty tooltip produced a box');
+  instance.update({ tooltip: false });
+  hover(sankeyNodes()[0]);
+  assert(tip.hidden, 'tooltip: false still shows');
+});
+await test('hovering a node strengthens its bands, hovering a band strengthens it', () => {
+  createSankey();
+  const band = sankeyBands()[0];
+  sankeyNodes()[1].dispatchEvent(new PointerEvent('pointerenter'));
+  assert(band.style.fillOpacity !== '' && Number(band.style.fillOpacity) > 0.35 && sankeyBands()[6].style.fillOpacity === '', 'node hover did not light exactly its bands');
+  sankeyNodes()[1].dispatchEvent(new PointerEvent('pointerleave'));
+  assert(band.style.fillOpacity === '', 'node hover did not reset');
+  band.dispatchEvent(new FocusEvent('focus'));
+  assert(Number(band.style.fillOpacity) > 0.35, 'a focused band is not emphasised');
+});
+await test('Sankey clicks carry the node or link, its index, ends and the native event', () => {
+  const calls: SankeyClickEvent[] = [];
+  createSankey({ onClick: event => calls.push(event) });
+  const event = new MouseEvent('click', { bubbles: true });
+  sankeyNodes()[2].dispatchEvent(event);
+  sankeyBands()[5].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  sankeyBands()[3].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const [node, link, tail] = calls;
+  assert(node.kind === 'node' && node.node === flow.nodes[2] && node.index === 2 && node.value === 50 && node.inflow === 50 && node.outflow === 50 && node.nativeEvent === event, 'node click payload is wrong');
+  assert(link.kind === 'link' && link.link === flow.links[5] && link.index === 5 && link.value === 30 && link.source === flow.nodes[1] && link.target === flow.nodes[4], 'link click payload is wrong');
+  assert(tail.kind === 'link' && tail.source === null && tail.target === flow.nodes[1], 'tail click payload is wrong');
+  assert(sankeyBands()[0].getAttribute('role') === 'button' && getComputedStyle(sankeyBands()[0]).cursor === 'pointer', 'bands are not buttons');
+  fixture.querySelector('svg')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  assert(calls.length === 3, 'the background opened something');
+});
+await test('Sankey keyboard: the flow order, arrows, Enter, Escape', () => {
+  const calls: SankeyClickEvent[] = [];
+  createSankey({ onClick: event => calls.push(event) });
+  const first = fixture.querySelector<SVGGraphicsElement>('[tabindex="0"]')!;
+  assert(first === sankeyNodes()[0] && fixture.querySelectorAll('[tabindex]').length === 13, 'the first mark is not Intake, or a mark is missing');
+  first.focus();
+  const order: string[] = [];
+  for (let step = 0; step < 6; step++) {
+    if (step) (document.activeElement as Element).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    order.push((document.activeElement as Element).getAttribute('aria-label')!);
+  }
+  assert(order.join(' | ') === 'Intake: 100 | Intake → Need Photos: 60 | Intake → Lost: 30 | Intake → …: 10 | … → Need Photos: 20 | Need Photos: 80', `order: ${order.join(' | ')}`);
+  const key = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  document.activeElement!.dispatchEvent(key);
+  assert(calls.length === 1 && calls[0].kind === 'node' && calls[0].index === 1 && key.defaultPrevented, 'Enter did not open the focused node');
+  document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+  assert(document.activeElement === sankeyNodes()[4], 'End did not reach the last node');
+  document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert(fixture.querySelector<HTMLElement>('[role=tooltip]')!.hidden, 'Escape left the tooltip open');
+});
+await test('the Sankey data table lists every link, a dash for a missing end', () => {
+  createSankey({ label: 'Lead flow' });
+  const table = fixture.querySelector('table')!;
+  const rows = [...table.querySelectorAll('tbody tr')].map(row => [...row.children].map(cell => cell.textContent).join(','));
+  assert(table.caption?.textContent === 'Lead flow' && [...table.querySelectorAll('thead th')].map(th => th.textContent).join(',') === 'From,To,Value', 'table header is wrong');
+  assert(rows.length === 9 && rows[2] === 'Intake,—,10' && rows[3] === '—,Need Photos,20' && rows[8] === 'Quote Sent,Booked,0', `rows: ${rows.join(' / ')}`);
+});
+await test('minWidth: a narrower host scrolls the Sankey instead of squeezing it', () => {
+  fixture.style.width = '320px';
+  const instance = createSankey({ minWidth: 560 });
+  const svg = fixture.querySelector('svg')!;
+  const box = svg.parentElement!;
+  assert(svg.getAttribute('viewBox') === '0 0 560 320' && svg.getBoundingClientRect().width === 560, 'the chart was squeezed');
+  assert(getComputedStyle(box).overflowX === 'auto' && box.scrollWidth > box.clientWidth && fixture.scrollWidth <= 320, 'the chart does not scroll inside its own box');
+  instance.update({ minWidth: undefined });
+  assert(fixture.querySelector('svg')!.getAttribute('viewBox') === '0 0 320 320' && getComputedStyle(fixture.querySelector('svg')!.parentElement!).overflowX !== 'auto', 'without minWidth the chart does not fit its host');
+});
+await test('Sankey export: standalone, static, stripes and fades kept, variables resolved', async () => {
+  fixture.style.setProperty('--flow', 'rgb(1, 2, 3)');
+  try {
+    const instance = createSankey({ onClick: () => {}, colors: { background: 'var(--flow)' } });
+    sankeyBands()[0].dispatchEvent(new PointerEvent('pointerenter'));
+    const markup = instance.toSVG();
+    const xml = new DOMParser().parseFromString(markup, 'image/svg+xml');
+    assert(!xml.querySelector('parsererror') && !markup.includes('var('), 'invalid XML or an unresolved variable');
+    assert(!xml.querySelector('[tabindex], [role=button]') && xml.querySelectorAll('[data-charto-band]').length === 8, 'export is interactive or lost bands');
+    assert(!xml.querySelector('[data-charto-band][style]') && xml.querySelector('[data-charto-band]')!.getAttribute('fill-opacity') === '0.35', 'export kept a hover');
+    assert(xml.querySelector('pattern rect') && xml.querySelectorAll('mask').length === 2, 'export lost the stripes or the fades');
+    assert(xml.querySelector('rect')?.getAttribute('fill') === 'rgb(1, 2, 3)', 'background missing');
+    const isWhite = await rasterize(instance);
+    const node = sankeyNodes()[0].getBBox();
+    assert(!isWhite(node.x + node.width / 2, node.y + node.height / 2), 'a node is missing from the export');
+  } finally { fixture.style.removeProperty('--flow'); }
+});
+await test('an empty Sankey says so; invalid updates keep the chart', () => {
+  const instance = createSankey({ nodes: [], links: [] });
+  assert(fixture.textContent?.includes('No data yet') && !sankeyNodes().length, 'missing empty state');
+  instance.update({ nodes: flow.nodes, links: flow.links.map(link => ({ ...link, value: 0 })) });
+  assert(fixture.textContent?.includes('No data yet'), 'a flow of nothing is not empty');
+  instance.update({ links: flow.links });
+  const before = instance.toSVG();
+  for (const patch of [{ links: [...flow.links, { from: 'sent', to: 'in', value: 1 }] }, { links: [{ from: 'in', to: 'nowhere', value: 1 }] }, { links: [{ from: 'in', to: 'photos', value: -1 }] }, { height: 80 }, { nodeWidth: 0 }, { minWidth: NaN }]) {
+    let threw = false;
+    try { instance.update(patch as Partial<SankeyChartOptions>); } catch { threw = true; }
+    assert(threw && instance.toSVG() === before, `invalid update ${JSON.stringify(patch)} changed the chart`);
+  }
+});
+await test('Sankey animation honours the animate option and reduced motion', () => {
+  const instance = createSankey({ animate: true });
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  assert(fixture.querySelector('[data-charto-bands]')!.getAnimations().length === (reduced ? 0 : 1) && fixture.querySelector('[data-charto-nodes]')!.getAnimations().length === (reduced ? 0 : 1), 'motion preference ignored');
+  instance.update({ animate: false });
+  assert(fixture.querySelector('[data-charto-bands]')!.getAnimations().length === 0, 'animation setting ignored');
+});
+await test('a Sankey resizes with its container and is destroyed cleanly', async () => {
+  const instance = createSankey();
+  const before = fixture.querySelector('svg')!.getAttribute('viewBox');
+  fixture.style.width = '420px';
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert(fixture.querySelector('svg')!.getAttribute('viewBox') !== before, 'chart did not resize');
+  const other = barChart(fixture, { data: [{ label: 'A', value: 1 }], animate: false });
+  instance.destroy();
+  assert(!sankeyNodes().length && bars().length === 1, 'destroy reached another chart');
+  other.destroy();
 });
 document.querySelector('#summary')!.textContent = `${passed} passed, ${failed} failed`;
 document.title = `Charto: ${passed} passed, ${failed} failed`;

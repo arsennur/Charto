@@ -1,4 +1,4 @@
-import { barChart, lineChart, type BarDatum, type BarChartOptions, type ChartClickEvent, type ChartPoint, type LineChartOptions } from '@arsennur/charto';
+import { barChart, lineChart, sankeyChart, type BarDatum, type BarChartOptions, type ChartClickEvent, type ChartPoint, type LineChartOptions, type SankeyChart, type SankeyChartOptions, type SankeyClickEvent, type SankeyItem, type SankeyLink, type SankeyNode } from '@arsennur/charto';
 
 const data: BarDatum[] = [{ label: 'Mon', value: [10, 20] }];
 const tooltip = (point: ChartPoint): string => `${point.label}: ${point.value ?? '—'}`;
@@ -43,3 +43,35 @@ lineChart('#chart', { data, missing: 'none' });
 lineChart('#chart', { data, series: [{ name: 'A', pattern: 'hatched' }] });
 // @ts-expect-error A click always carries a number, never a placeholder's null.
 barChart('#chart', { data, onClick: (event: ChartClickEvent & { value: null }) => event });
+
+const flowNodes: SankeyNode[] = [{ id: 'a', label: 'A' }, { id: 'b', label: 'B', column: 1, color: 'var(--ok)' }];
+const flowLinks: SankeyLink[] = [{ from: 'a', to: 'b', value: 3 }, { from: 'a', value: 1, pattern: 'hatched' }, { to: 'b', value: 2, color: '#999' }];
+const flowTooltip = (item: SankeyItem): string => item.kind === 'node'
+  ? `${item.node.label} ${item.inflow}/${item.outflow}`
+  : `${item.source?.label ?? '…'} → ${item.target?.label ?? '…'} ${item.link.value}`;
+const flowOptions: SankeyChartOptions = {
+  nodes: flowNodes, links: flowLinks, height: 240, minWidth: 600, nodeWidth: 8, nodeGap: 10, labels: true, values: false,
+  theme: 'dark', colors: { text: 'var(--muted)' }, animate: false, label: 'Flow', formatValue: value => `${value}`, tooltip: flowTooltip,
+};
+const flow: SankeyChart = sankeyChart(document.createElement('div'), flowOptions);
+const onFlowClick = (event: SankeyClickEvent): void => {
+  const index: number = event.index;
+  const value: number = event.value;
+  const nativeEvent: MouseEvent | KeyboardEvent = event.nativeEvent;
+  const ends: Array<SankeyNode | null> = event.kind === 'link' ? [event.source, event.target] : [event.node];
+  void [index, value, nativeEvent, ends];
+};
+flow.update({ onClick: onFlowClick, tooltip: false });
+flow.update({ links: [], tooltip: undefined });
+const flowSvg: string = flow.toSVG();
+flow.destroy();
+void flowSvg;
+// @ts-expect-error A link always carries its value.
+sankeyChart('#chart', { nodes: flowNodes, links: [{ from: 'a', to: 'b' }] });
+// @ts-expect-error A band is solid or hatched.
+sankeyChart('#chart', { nodes: flowNodes, links: [{ from: 'a', to: 'b', value: 1, pattern: 'dots' }] });
+// @ts-expect-error A Sankey takes nodes and links, not data.
+sankeyChart('#chart', { data: [] });
+// @ts-expect-error A node item carries no link.
+const notALink = (item: SankeyItem): unknown => item.kind === 'node' ? item.link : null;
+void notALink;

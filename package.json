@@ -1,7 +1,7 @@
 {
   "name": "@arsennur/charto",
   "version": "0.3.0",
-  "description": "Small, thoughtful SVG bar and line charts. Zero runtime dependencies.",
+  "description": "Small, thoughtful SVG bar, line and Sankey charts. Zero runtime dependencies.",
   "license": "MIT",
   "keywords": [
     "chart",
@@ -9,6 +9,7 @@
     "svg",
     "bar-chart",
     "line-chart",
+    "sankey",
     "data-visualization",
     "typescript"
   ],

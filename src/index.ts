@@ -1,9 +1,10 @@
 import { getDomain, segments, validate, valuesOf } from './layout.ts';
 import { createFrame, type ChartType } from './frame.ts';
 import { linePath, type Point } from './line-path.ts';
+import { sankey } from './sankey.ts';
 import { NS, exact, hatches, palette, shortNumber, shorten, svgElement, svgText, themeColors, validateChrome } from './svg.ts';
-import type { BarChart, BarChartOptions, LineChart, LineChartOptions } from './types.js';
-export type { BarChart, BarChartOptions, BarDatum, BarSeries, ChartClickEvent, ChartColors, ChartPoint, DatumValue, LineChart, LineChartOptions, LineDatum, LineSeries } from './types.js';
+import type { BarChart, BarChartOptions, LineChart, LineChartOptions, SankeyChart, SankeyChartOptions } from './types.js';
+export type { BarChart, BarChartOptions, BarDatum, BarSeries, ChartClickEvent, ChartColors, ChartPoint, DatumValue, LineChart, LineChartOptions, LineDatum, LineSeries, SankeyChart, SankeyChartOptions, SankeyClickEvent, SankeyItem, SankeyLink, SankeyNode } from './types.js';
 
 type Options = BarChartOptions & LineChartOptions;
 
@@ -360,4 +361,9 @@ export function barChart(target: string | HTMLElement, options: BarChartOptions)
 /** Create an SVG line chart with sharp segments or smooth curves. */
 export function lineChart(target: string | HTMLElement, options: LineChartOptions): LineChart {
   return createFrame(target, options, cartesian(true));
+}
+
+/** Create a Sankey chart: nodes in columns, bands as wide as the flow between them. */
+export function sankeyChart(target: string | HTMLElement, options: SankeyChartOptions): SankeyChart {
+  return createFrame(target, options, sankey);
 }

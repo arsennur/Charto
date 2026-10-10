@@ -79,7 +79,7 @@ Yayımladığınız sürümleri ve etiketleri değiştirmeyin; her güncellemeyi
 
 ## Küçük API
 
-`barChart(elementOrSelector, options)` veya `lineChart(elementOrSelector, options)` bir chart oluşturur. İkisinde de gereken tek seçenek `data`. Güncelleme, animasyon tekrarı, export ve temizleme metotları ortaktır.
+`barChart(elementOrSelector, options)`, `lineChart(elementOrSelector, options)` veya `sankeyChart(elementOrSelector, options)` bir chart oluşturur. Bar ve line chart'ta gereken tek seçenek `data`; Sankey `nodes` ve `links` ister ([Sankey](#sankey)). Güncelleme, animasyon tekrarı, export ve temizleme metotları üçünde de ortaktır.
 
 ### Line chart: keskin veya kıvrımlı
 
@@ -269,6 +269,66 @@ barChart('#chart', {
 - Tooltip fonksiyonu bu noktada `value: null` alır. `ChartClickEvent.value` her zaman sayıdır.
 - Yığılmış barlarda kesikli çubuk yalnızca yığındaki bütün değerler `null` olduğunda çizilir; tek bir `null` segment yer kaplamaz.
 - Hiçbir şey çizmemek için `missing: 'none'` kullanın.
+
+### Sankey
+
+Bir akışın adımlarını sütunlardaki düğümler, adımlar arasındaki akışı da genişliği değerle orantılı bantlar olarak çizer. Satış hunisi, dönüşüm yolu veya bir bütçenin nereye gittiği için uygundur.
+
+```ts
+import { sankeyChart } from '@arsennur/charto';
+
+const chart = sankeyChart('#chart', {
+  nodes: [
+    { id: 'gelen', label: 'Gelen' },
+    { id: 'teklif', label: 'Teklif' },
+    { id: 'gorusme', label: 'Görüşme' },
+    { id: 'satis', label: 'Satış', color: '#27bd83' },
+    { id: 'kayip', label: 'Kayıp', color: '#fa4768' },
+  ],
+  links: [
+    { from: 'gelen', to: 'teklif', value: 420 },
+    { from: 'gelen', to: 'kayip', value: 310 }, // iki sütunun altından geçer
+    { to: 'teklif', value: 60 }, // doğrudan teklif adımından başlayanlar
+    { from: 'teklif', to: 'gorusme', value: 300 },
+    { from: 'teklif', to: 'kayip', value: 140 },
+    { from: 'teklif', value: 40, color: '#a1a1aa', pattern: 'hatched' }, // hâlâ yolda
+    { from: 'gorusme', to: 'satis', value: 110 },
+    { from: 'gorusme', to: 'kayip', value: 190 },
+  ],
+  minWidth: 640,
+  label: 'Satış hunisi',
+  onClick: item => console.log(item.kind, item.index, item.value),
+});
+```
+
+- Her düğümün benzersiz bir `id`'si ve bir `label`'ı vardır. `column` vermezseniz düğüm, kendisine bağlanan en uzak düğümün bir sağındaki sütuna yerleşir; hiçbir düğüm bağlanmıyorsa ilk sütuna. Bir sütundaki düğümler verdiğiniz sırayla yukarıdan aşağı dizilir.
+- Bir bağlantı her zaman daha sağdaki bir sütuna gider. Aynı veya daha soldaki bir sütuna giden bağlantı `RangeError` verir: Sankey döngü çizmez. Bilinmeyen veya tekrarlanan `id`, negatif ya da sonlu olmayan değer ve iki ucu da eksik bağlantı da reddedilir; hatalı güncelleme mevcut grafiği bozmaz. `value: 0` olan bağlantı kabul edilir ama çizilmez.
+- Sütun atlayan bir bağlantı, geçtiği her sütunda o sütunun düğümlerinin altından geçer; hiçbir bant bir düğümün üstünden geçmez. Bu geçişler sütunun dibinden yukarı doğru dizilir. Böylece bir hunide her adımdan son sütundaki "Kayıp"a giden bantlar grafiğin altında tek bir akış olarak toplanır.
+- `from`'u olmayan bağlantı düğüme soldan giren, `to`'su olmayan bağlantı düğümden çıkıp sönen kısa bir kuyruktur: "doğrudan bu adımdan başladı" veya "hâlâ yolda" gibi.
+- Bir düğümün yüksekliği gelen ve giden akıştan büyük olanıdır, kuyruklar dahil. Bütün grafik tek bir ölçek kullanır; en dolu sütun yüksekliği doldurur.
+- Bant rengi varsayılan olarak kaynak düğümün, soldan giren kuyrukta hedef düğümün rengidir. `pattern: 'hatched'` bandı çizgili çizer. Düğümün üzerine gelindiğinde ona bağlı bantlar belirginleşir.
+- Etiket düğümün yanındadır: son sütunda solunda, diğer sütunlarda sağında. `values` düğümün toplamını etiketin ardına yazar; sığmayan etiket kısaltılır.
+- `minWidth` verilirse chart bu genişlikten dar çizilmez; daha dar bir kapsayıcıda kendi kutusu içinde yatay kayar. Sayfa yana kaymaz; telefonlar için uygundur.
+- Tooltip fonksiyonu ve `onClick` bir `SankeyItem` alır: düğümde `{ kind: 'node', node, index, value, inflow, outflow }`, bantta `{ kind: 'link', link, index, value, source, target }`. `index`, öğenin `nodes` veya `links` dizisindeki sırasıdır; kuyruğun eksik ucu `null` olur. Varsayılan tooltip düğümde `Ad` ve değeri, bantta `Kaynak → Hedef` ve değeri gösterir; kuyruğun eksik ucu `…` olarak yazılır.
+- Klavyeyle düğümler ve bantlar akış sırasıyla gezilir: sütun sütun, her düğüm kendisine giren kuyruklardan sonra, kendisinden çıkan bantlardan önce. Erişilebilir tabloda her bağlantı bir satırdır (Kaynak · Hedef · Değer; eksik uç `—`).
+- Açılışta bantlar soldan sağa çizilir, düğümler ve etiketler belirir. `animate: false` ve sistemin hareketi azaltma tercihi desteklenir.
+
+| Seçenek | Varsayılan | Açıklama |
+| --- | --- | --- |
+| `nodes` | Gerekli | `{ id: string, label: string, column?: number, color?: string }[]` |
+| `links` | Gerekli | `{ from?: string, to?: string, value: number, color?: string, pattern?: 'solid' \| 'hatched' }[]` |
+| `height` | `320` | Piksel cinsinden yükseklik; en az 120 |
+| `minWidth` | Yok | Chart'ın çizileceği en dar genişlik; daha dar kapsayıcı yatay kayar |
+| `nodeWidth` | `10` | Düğüm çubuğunun genişliği |
+| `nodeGap` | `12` | Bir sütunda üst üste duran öğeler arasındaki boşluk |
+| `labels` | `true` | Düğüm etiketleri |
+| `values` | `true` | Düğümün toplamı etiketin ardında |
+| `theme` / `colors` | `'light'` | Bar ve line chart'taki gibi; her renk CSS değişkeni olabilir |
+| `animate` | `true` | Açılış animasyonu |
+| `tooltip` | `true` | `true`, `false` veya `(item: SankeyItem) => string` |
+| `label` | `'Sankey chart'` | Erişilebilir chart adı |
+| `formatValue` | Otomatik | `(value: number) => string`; etiket, tooltip ve tablo biçimi |
+| `onClick` | Yok | `(event: SankeyClickEvent) => void`; tıklanan düğüm veya bant |
 
 ### Renkler ve CSS değişkenleri
 

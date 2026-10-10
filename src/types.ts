@@ -112,3 +112,64 @@ export interface LineChartOptions extends Omit<BarChartOptions, 'orientation' | 
 }
 
 export interface LineChart extends Chart<LineChartOptions> {}
+
+export interface SankeyNode {
+  /** Unique within the chart; links name nodes by it. */
+  id: string;
+  label: string;
+  /** Zero-based. Omitted: one past the furthest node linking into it (0 if none does). */
+  column?: number;
+  /** Any CSS colour, including `var(--token)`. Default: the palette, by node index. */
+  color?: string;
+}
+
+export interface SankeyLink {
+  /** Omitted: flow that starts at `to`, drawn as a short tail entering it. */
+  from?: string;
+  /** Omitted: flow that ends at `from`, drawn as a short tail leaving it. */
+  to?: string;
+  /** At least 0. A zero link is not drawn. */
+  value: number;
+  /** Any CSS colour. Default: the source node's (the target's for a tail in). */
+  color?: string;
+  /** `'hatched'` draws the band as stripes, e.g. for flow that is still on its way. */
+  pattern?: 'solid' | 'hatched';
+}
+
+/** A node or a link, as a tooltip formatter and a click receive it. */
+export type SankeyItem =
+  | { kind: 'node'; node: SankeyNode; /** Index in `nodes`. */ index: number; value: number; inflow: number; outflow: number }
+  | { kind: 'link'; link: SankeyLink; /** Index in `links`. */ index: number; value: number; source: SankeyNode | null; target: SankeyNode | null };
+
+export type SankeyClickEvent = SankeyItem & { nativeEvent: MouseEvent | KeyboardEvent };
+
+export interface SankeyChartOptions {
+  nodes: SankeyNode[];
+  /** Every link goes to a later column: a Sankey draws no cycles. */
+  links: SankeyLink[];
+  /** Pixels, at least 120. Default 320. */
+  height?: number;
+  /** Never drawn narrower: a narrower host scrolls sideways. */
+  minWidth?: number;
+  /** Width of a node bar in pixels. Default 10. */
+  nodeWidth?: number;
+  /** Space between the stacked nodes of a column. Default 12. */
+  nodeGap?: number;
+  /** Node labels. Default true. */
+  labels?: boolean;
+  /** A node's total after its label. Default true. */
+  values?: boolean;
+  theme?: 'light' | 'dark';
+  /** Override the theme's chrome colours, e.g. with your own CSS variables. */
+  colors?: Partial<ChartColors>;
+  animate?: boolean;
+  /** Accessible name for the chart and its data table. */
+  label?: string;
+  formatValue?: (value: number) => string;
+  /** Enable, disable, or format tooltip text. Strings are never interpreted as HTML. */
+  tooltip?: boolean | ((item: SankeyItem) => string);
+  /** Called on click/tap or Enter/Space activation of a node or a band. */
+  onClick?: (event: SankeyClickEvent) => void;
+}
+
+export interface SankeyChart extends Chart<SankeyChartOptions> {}

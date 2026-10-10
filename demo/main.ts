@@ -1,4 +1,4 @@
-import { barChart, lineChart, type BarChart, type BarChartOptions, type BarDatum, type ChartClickEvent, type ChartPoint, type LineChart, type LineChartOptions } from '../src/index.ts';
+import { barChart, lineChart, sankeyChart, type BarChart, type BarChartOptions, type BarDatum, type ChartClickEvent, type ChartPoint, type LineChart, type LineChartOptions, type SankeyClickEvent, type SankeyLink, type SankeyNode } from '../src/index.ts';
 import bundleSize from './bundle-size.json';
 import './style.css';
 
@@ -98,6 +98,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <article class="mini-example-card"><div><span class="example-kicker">A LITTLE MOMENTUM</span><h3>Weekly activity</h3><strong>411 <small>visits</small></strong></div><div id="example-mini-line"></div></article>
         <article class="mini-example-card"><div><span class="example-kicker">SMALL SPACE, FULL STORY</span><h3>Daily orders</h3><strong>128 <small>orders</small></strong></div><div id="example-mini-bar"></div></article>
       </div>
+      <article class="example-card flow-example"><div class="example-top"><div><span class="example-kicker">WHERE THE FLOW GOES</span><h3>Every lead, every turn.</h3></div><span class="example-tag">Sankey</span></div><div class="example-meta"><strong>Drop-offs gather along the foot. Striped tails are still on their way.</strong><code>sankeyChart</code></div><div id="example-sankey"></div></article>
     </section>
 
     <section id="quick-start" class="quick-start" aria-labelledby="quick-start-title"><div class="quick-copy"><div class="eyebrow"><span class="small-line"></span> SMALL API. BIG LITTLE DETAILS.</div><h2 id="quick-start-title">A few lines.<br>That's it.</h2><p>Give it a home and some data.<br>We'll take care of the good-looking part.</p><div class="feature-checks"><span>${icon('check', 14)} Any framework</span><span>${icon('check', 14)} TypeScript ready</span><span>${icon('check', 14)} Keyboard accessible</span></div><button id="open-docs" class="docs-button" aria-expanded="false" aria-controls="api-docs">Explore the API ${icon('right')}</button></div><div class="quick-code"><div class="code-filename"><span><i></i> hello-charto.ts</span><button id="copy-quick" class="text-button" aria-label="Copy quick start code">${icon('copy', 15)} Copy</button></div><pre><code><span class="syntax-purple">import</span> { lineChart } <span class="syntax-purple">from</span> <span class="syntax-green">'@arsennur/charto'</span>;
@@ -112,7 +113,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   curve: <span class="syntax-green">'smooth'</span>,
   color: <span class="syntax-green">'#27bd83'</span>,
 });</code></pre><div class="quick-code-footer">No providers. No stylesheet imports. Just charts.<span>ESM</span></div></div></section>
-    <section id="api-docs" class="api-docs" hidden aria-label="API documentation"><div><h3>Bring Charto into your project</h3><p>This is a local package. Run <code>npm pack</code> in this project, install the generated <code>.tgz</code> in your app, then import <code>barChart</code> or <code>lineChart</code>. It has no runtime dependencies. In a plain HTML page, import the built <code>dist/charto.js</code> directly.</p><p>Create a container such as <code>&lt;div id="chart"&gt;&lt;/div&gt;</code>. Create your chart after it mounts and <code>chart.destroy()</code> when it unmounts.</p></div><div><h3>Two charts. One familiar API.</h3><dl><dt>data</dt><dd>Labels and values. Use value arrays for multiple series.</dd><dt>series</dt><dd>Names and colors for multiple series.</dd><dt>onClick</dt><dd>Handle a bar, segment, or point click with its value, category, and series.</dd><dt>curve / strokeWidth / points / fill</dt><dd>Line style, thickness, markers, and gradient fill.</dd><dt>compact</dt><dd>Small charts without axes, grid, or labels.</dd><dt>tooltip</dt><dd>true, false, or a function returning tooltip text.</dd><dt>min / max</dt><dd>Fixed scale boundaries. Omit for automatic scaling.</dd><dt>orientation / mode</dt><dd>vertical or horizontal; grouped or stacked.</dd><dt>color / theme / colors / radius</dt><dd>Your visual language, with thoughtful defaults. Every colour can be a CSS variable.</dd><dt>pattern / missing</dt><dd>Hatched series for projections; a dashed stub for a null value that is not zero.</dd><dt>animate / grid / labels / values</dt><dd>Simple switches for motion and detail. On a stack, values is its total.</dd><dt>height / label / formatValue</dt><dd>Chart height, accessible name, and number formatting.</dd></dl><p><code>chart.update(options)</code> · <code>chart.replay()</code><br><code>chart.toSVG()</code> · <code>chart.destroy()</code></p><p>Stacked bars round the outer corners and keep internal joins flush. Set radius to 0 for square corners.</p></div></section>
+    <section id="api-docs" class="api-docs" hidden aria-label="API documentation"><div><h3>Bring Charto into your project</h3><p>This is a local package. Run <code>npm pack</code> in this project, install the generated <code>.tgz</code> in your app, then import <code>barChart</code>, <code>lineChart</code> or <code>sankeyChart</code>. It has no runtime dependencies. In a plain HTML page, import the built <code>dist/charto.js</code> directly.</p><p>Create a container such as <code>&lt;div id="chart"&gt;&lt;/div&gt;</code>. Create your chart after it mounts and <code>chart.destroy()</code> when it unmounts.</p></div><div><h3>Three charts. One familiar API.</h3><dl><dt>nodes / links</dt><dd>A Sankey's steps and the flow between them. A link that skips columns runs under them; a link with one end is a short tail.</dd><dt>data</dt><dd>Labels and values. Use value arrays for multiple series.</dd><dt>series</dt><dd>Names and colors for multiple series.</dd><dt>onClick</dt><dd>Handle a bar, segment, or point click with its value, category, and series.</dd><dt>curve / strokeWidth / points / fill</dt><dd>Line style, thickness, markers, and gradient fill.</dd><dt>compact</dt><dd>Small charts without axes, grid, or labels.</dd><dt>tooltip</dt><dd>true, false, or a function returning tooltip text.</dd><dt>min / max</dt><dd>Fixed scale boundaries. Omit for automatic scaling.</dd><dt>orientation / mode</dt><dd>vertical or horizontal; grouped or stacked.</dd><dt>color / theme / colors / radius</dt><dd>Your visual language, with thoughtful defaults. Every colour can be a CSS variable.</dd><dt>pattern / missing</dt><dd>Hatched series for projections; a dashed stub for a null value that is not zero.</dd><dt>animate / grid / labels / values</dt><dd>Simple switches for motion and detail. On a stack, values is its total.</dd><dt>height / label / formatValue</dt><dd>Chart height, accessible name, and number formatting.</dd></dl><p><code>chart.update(options)</code> · <code>chart.replay()</code><br><code>chart.toSVG()</code> · <code>chart.destroy()</code></p><p>Stacked bars round the outer corners and keep internal joins flush. Set radius to 0 for square corners.</p></div></section>
   </main>
   <footer class="site-footer"><a href="#" class="brand">${logo}<span>charto.</span></a><span>A small thing, made with care.</span><span>Less code. More clarity.</span></footer>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -356,4 +357,50 @@ const examples = [
     mode: 'stacked', radius: 8, height: 190, label: 'Weekly spending by category', onClick: exampleClick,
   }),
 ];
-if (import.meta.hot) import.meta.hot.dispose(() => { chart.destroy(); examples.forEach(example => example.destroy()); clearTimeout(toastTimeout); });
+// A sales funnel, step by step. Every step loses leads into Lost or Early exit
+// in the last column; those bands run under the steps they skip and gather into
+// one stream along the foot. Striped tails are leads still on their way.
+const funnelNodes: SankeyNode[] = [
+  { id: 'intake', label: 'Intake', color: '#9066f4' },
+  { id: 'photos', label: 'Need Photos', color: '#7b74f6' },
+  { id: 'quote', label: 'Waiting for Quote', color: '#3982f7' },
+  { id: 'sent', label: 'Quote Sent', color: '#2a9fd6' },
+  { id: 'interested', label: 'Interested', color: '#14b8a6' },
+  { id: 'follow', label: 'Follow Up', color: '#0f9f95' },
+  { id: 'booked', label: 'Booked', color: '#27bd83', column: 5 },
+  { id: 'lost', label: 'Lost', color: '#fa4768', column: 5 },
+  { id: 'exit', label: 'Early exit', color: '#ff9e24', column: 5 },
+];
+const onTheWay = { color: '#a1a1aa', pattern: 'hatched' } as const;
+const drop = (from: string, to: 'lost' | 'exit', value: number): SankeyLink => ({ from, to, value, color: to === 'lost' ? '#fa4768' : '#ff9e24' });
+const funnelLinks: SankeyLink[] = [
+  { from: 'intake', to: 'photos', value: 240 },
+  { from: 'intake', to: 'quote', value: 315 },
+  drop('intake', 'exit', 870),
+  { from: 'intake', value: 60, ...onTheWay },
+  { to: 'photos', value: 300 },
+  { from: 'photos', to: 'quote', value: 380 },
+  drop('photos', 'exit', 60),
+  drop('photos', 'lost', 50),
+  { from: 'photos', value: 50, ...onTheWay },
+  { from: 'quote', to: 'sent', value: 640 },
+  drop('quote', 'lost', 30),
+  { from: 'quote', value: 25, ...onTheWay },
+  { from: 'sent', to: 'interested', value: 160 },
+  { from: 'sent', to: 'follow', value: 115 },
+  { from: 'sent', to: 'booked', value: 10 },
+  drop('sent', 'lost', 290),
+  { from: 'sent', value: 65, ...onTheWay },
+  { from: 'interested', to: 'booked', value: 37 },
+  drop('interested', 'lost', 70),
+  { from: 'interested', value: 53, ...onTheWay },
+  { from: 'follow', to: 'booked', value: 15 },
+  drop('follow', 'lost', 75),
+  { from: 'follow', value: 25, ...onTheWay },
+  { to: 'booked', value: 40 },
+];
+const flowClick = (event: SankeyClickEvent): void => toast(event.kind === 'node'
+  ? `${event.node.label} — ${event.value.toLocaleString('en')} leads`
+  : `${event.source?.label ?? 'Entered'} → ${event.target?.label ?? 'still on the way'} — ${event.value.toLocaleString('en')}`);
+const flow = sankeyChart('#example-sankey', { nodes: funnelNodes, links: funnelLinks, height: 380, minWidth: 720, label: 'Lead flow through the sales funnel', onClick: flowClick });
+if (import.meta.hot) import.meta.hot.dispose(() => { chart.destroy(); examples.forEach(example => example.destroy()); flow.destroy(); clearTimeout(toastTimeout); });
